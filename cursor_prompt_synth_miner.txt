@@ -1,0 +1,244 @@
+Cursor Prompt: Build PatchTST + Student-t Synth Miner (Option 1)
+
+You are implementing a Bittensor Synth subnet miner module in an existing base project. Create a new folder `PatchTST+Student-T/` containing inference, caching, artifacts, and offline scripts (training + calibration). The miner runtime must be CPU-friendly, fast, and always return valid simulation paths.
+
+0) Context and constraints
+- Miners must respond to validator prompts containing `Simulation(simulation_input=SimulationInput(...))`.
+- Prompt schema example (LF):
+  - `asset="BTC"`
+  - `start_time="2025-02-10T14:59:00+00:00"` (ISO8601 UTC)
+  - `time_increment=300`
+  - `time_length=86400`
+  - `num_simulations=1000`
+- HF prompts differ only by:
+  - `time_increment=60`, `time_length=3600`
+- Data sources:
+  - Historical bars/features: Pyth Benchmarks TradingView shim:
+    - `BASE_URL = "https://benchmarks.pyth.network/v1/shims/tradingview/history"`
+    - `TOKEN_MAP = { ... }` (provided below)
+  - Anchor price for path start: Hermes:
+    - use `GET https://hermes.pyth.network/v2/updates/price/latest?ids[]=<feed_id>`
+- Validators use XAUT feed: `Crypto.XAUT/USD` (ticker in project is `XAU` mapping to that symbol).
+- You must run on CPU using PyTorch.
+
+Provided Benchmarks symbol map (must use)
+TOKEN_MAP = {
+  "BTC": "Crypto.BTC/USD",
+  "ETH": "Crypto.ETH/USD",
+  "XAU": "Crypto.XAUT/USD",
+  "SOL": "Crypto.SOL/USD",
+  "SPYX": "Crypto.SPYX/USD",
+  "NVDAX": "Crypto.NVDAX/USD",
+  "TSLAX": "Crypto.TSLAX/USD",
+  "AAPLX": "Crypto.AAPLX/USD",
+  "GOOGLX": "Crypto.GOOGLX/USD",
+}
+
+1) High-level design (Option 1)
+Implement 3 models and route prompts:
+
+Models
+1. HF-Shared model (PatchTST + Student-t): assets BTC/ETH/SOL/XAU
+   - prompt type: high frequency
+   - horizon/step: 1 hour / 1 minute
+2. LF-CryptoGold model: assets BTC/ETH/SOL/XAU
+   - prompt type: low frequency
+   - horizon/step: 24 hours / 5 minutes
+3. LF-EquitiesTokens model: assets SPYX/NVDAX/TSLAX/AAPLX/GOOGLX
+   - prompt type: low frequency
+   - horizon/step: 24 hours / 5 minutes
+   - includes equity session features
+
+Routing
+- If (time_increment==60 and time_length==3600) → HF-Shared
+- Else if asset in {BTC,ETH,SOL,XAU} → LF-CryptoGold
+- Else → LF-EquitiesTokens
+
+2) Miner integration
+Base project has `neurons/miner.py` inheriting from `base/miner.py` and calling `generate_simulations`.
+Create a new miner class `duke_miner_1` inheriting the base miner, and override the request handler so that:
+- It receives the Simulation prompt
+- Calls your `ForecastEngine.generate_paths(simulation_input)` and returns paths
+- It does NOT use the base `generate_simulations` implementation
+
+3) Output contract (must match validator expectations)
+Given SimulationInput(asset, start_time, time_increment, time_length, num_simulations):
+- Compute H = time_length / time_increment (must be integer)
+- Return exactly num_simulations paths
+- Each path length is exactly H+1 points, including anchor at index 0
+- Each point is {"time": <ISO8601>, "price": <float>}
+- time[0] must equal prompt start_time string normalized to ISO (UTC)
+- time[i] = start_time + i*time_increment exactly
+- price[0] must equal Hermes anchor price (converted using expo)
+- All prices must be finite and > 0
+- Must return within time limits; never timeout.
+
+4) Data + caching for inference (must be efficient)
+Implement per-asset rolling caches for Benchmarks closes:
+- HF cache: 1-minute closes covering >= 30 hours
+- LF cache: 5-minute closes covering >= 23 days
+
+Refresh policy:
+- HF refresh every 2–5 minutes by fetching last ~3 hours at 1m and merging
+- LF refresh every 30–60 minutes by fetching last ~2 days at 5m and merging
+
+On prompt:
+- Snap start_time to grid for feature slicing:
+  - HF: floor to 60s
+  - LF: floor to 300s
+- Slice cache to obtain required lookback window:
+  - HF lookback: 24h @1m → returns length 1440
+  - LF lookback: 21d @5m → returns length 6048
+- If cache insufficient, do one backfill fetch:
+  - HF: fetch last 30h
+  - LF: fetch last 23d
+- If still insufficient or too many missing points:
+  - HF if >5% missing, LF if >2% missing → use fallback generator (Section 8)
+
+Benchmarks API usage:
+- Call history?symbol=<TOKEN_MAP[asset]>&resolution=<1 or 5>&from=<unix>&to=<unix>
+- Parse response arrays t and c closes; handle s != "ok".
+
+5) Features (exact)
+Operate on log returns r_t = log(P_t/P_{t-1}) and compute rolling stats using only past data.
+
+HF features per timestep (1m grid), total ~15 channels
+- r_t
+- std_2, std_5, std_15, std_30, std_60, std_240 (windows in minutes)
+- mean_15, mean_60
+- absmean_15, absmean_60
+- sin/cos(hour-of-day)
+- sin/cos(day-of-week)
+
+LF features per timestep (5m grid), compact
+- r_t
+- std_1, std_6, std_36, std_288, std_864 (windows in 5m steps: 5m,30m,3h,24h,3d)
+- mean_36, mean_288
+- absmean_36, absmean_288
+- sin/cos(hour-of-day)
+- sin/cos(day-of-week)
+
+LF-EquitiesTokens additional session features
+Compute in America/New_York regular session:
+- is_session_open (0/1)
+- minutes_to_open (0 when open; else minutes until next open; clip 0..780)
+- minutes_to_close (when open minutes until close; else 0; clip 0..390)
+
+Normalization:
+- store feature mean/std per asset per model (from training)
+- standardize at inference; safe clamp extreme standardized values (optional)
+
+6) Model architecture (PatchTST-like + Student-t)
+Implement PatchTST-style patching encoder in PyTorch (CPU). It must support:
+- input tensor [B, L, C]
+- asset embedding id [B]
+- outputs per horizon:
+  - mu [B, H] (mean log return)
+  - log_sigma [B, H]
+  - nu [B] or scalar (Student-t df), learned per asset is acceptable
+
+Use 3 separate model checkpoints (HF, LF crypto, LF equity). Keep them loaded in memory (no reload per prompt).
+
+Recommended sizes:
+- HF: small (e.g., d_model~192, layers~6)
+- LF: medium (e.g., d_model~256, layers~8)
+
+7) Path sampling (vectorized, one forward pass)
+After forward pass:
+- Apply calibration sigma_scale: sigma *= sigma_scale[mode, asset]
+- Optional latent volatility clustering per simulation:
+  - AR(1) latent z_t with:
+    - HF: rho=0.98, s_vol=0.15
+    - LF-crypto: rho=0.99, s_vol=0.10
+    - LF-equity: rho=0.995, s_vol=0.08
+  - log_sigma' = log_sigma + s_vol*z
+- Sample eps ~ StudentT(nu)
+- Returns r = mu + exp(log_sigma') * eps
+- Prices: P_t = P_{t-1} * exp(r_t)
+- N paths: N=num_simulations (1000)
+Must be fully vectorized; no per-path model calls.
+
+8) Fallback generator (must exist)
+If:
+- Hermes anchor fetch fails
+- Benchmarks data insufficient after backfill
+- model outputs NaN/inf
+- you are near timeout
+Then generate valid paths using baseline:
+- anchor price from last cached or fallback price if Hermes fails
+- sigma from recent realized vol (computed from whatever lookback you have)
+- drift=0
+- Student-t noise + optional latent vol
+Return paths quickly and validly.
+
+9) Calibration (offline script, not inside miner)
+Implement offline calibration scripts that compute sigma_scale[mode, asset] and write artifacts/current/calibration.json via a staging+publish flow.
+
+Windows:
+- HF calibration window: last 3 days (1m)
+- LF calibration window: last 10 days (5m)
+
+Horizons (exact, from validator scoring):
+- LF steps: {1, 6, 36, 288}
+- HF steps: {1,2,5,10,15,20,25,30,35,40,45,50,55,60}
+
+Procedure:
+- sample timestamps:
+  - HF: every 10–15 minutes across 3 days
+  - LF: every 30–60 minutes across 10 days
+- at each timestamp, run model once and mini-sample N=128–200 to estimate predicted dispersion of cumulative returns at horizons
+- compute realized dispersion from historical returns at same timestamps
+- ratio per horizon = std_real / std_pred
+- combine ratios in log space using specified weights:
+  - LF: weights 5m 0.10, 30m 0.25, 3h 0.35, 24h 0.30
+  - HF: weights:
+    - 1:0.18, 2:0.12, 5:0.10, 10:0.08, 15:0.08, 20:0.06, 25:0.05, 30:0.08,
+      35:0.05, 40:0.05, 45:0.05, 50:0.04, 55:0.03, 60:0.03
+- update sigma_scale via EMA in log space:
+  - HF alpha=0.4, LF alpha=0.2
+- clamps:
+  - sigma_scale in [0.5, 2.0]
+  - max per-run move HF ±10%, LF ±7%
+- record counts used; if counts too low (HF<150, LF<120) do not update.
+
+10) Training (offline)
+Implement offline training scripts (not in miner) that train 3 models using Benchmarks historical data.
+
+Data requirements:
+- HF: ideally 6–12 months 1-minute data (min 90 days)
+- LF: ideally 12–24 months 5-minute data (min 6 months)
+Use as much history as available for equities tokens.
+
+Training objective:
+- Student-t negative log-likelihood on horizon returns (mu/log_sigma/nu)
+
+Retrain cadence:
+- calibration: HF every 3h, LF daily
+- optional fine-tune: HF daily, LF weekly (only if improves)
+- full retrain: HF every 2–4 weeks, LF every 1–2 months
+
+11) Automation with cron (same machine)
+Create scripts and a recommended cron schedule:
+- HF calibration every 3 hours
+- LF calibration daily
+- training weekly off-peak
+
+Jobs must:
+- run with low priority (nice/ionice)
+- write to staging then atomically publish to current
+- automatically restart miner service after successful publish
+- avoid frequent restarts (no more than once per 30 minutes)
+
+12) Acceptance tests (must implement)
+Provide a test harness that:
+- creates a fake SimulationInput for HF and LF
+- runs ForecastEngine.generate_paths
+- validates:
+  - correct number of paths and points
+  - correct timestamps increments
+  - anchor price applied
+  - prices positive and finite
+  - runtime under expected bounds on CPU
+Also include schema validation that exactly matches expected list-of-paths-of-dicts.
+
+Now implement the full solution in Python with clean module structure, logging, error handling, and minimal external dependencies (requests, pytorch).
