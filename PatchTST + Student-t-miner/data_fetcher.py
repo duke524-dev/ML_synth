@@ -54,13 +54,25 @@ class BenchmarksFetcher:
             response = requests.get(BASE_URL, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
-            
-            if data.get("s") != "ok":
-                logger.warning(f"API returned non-ok status: {data.get('s')}")
+
+            # The Benchmarks TradingView shim uses an "s" field for status, but in practice
+            # some non-"ok" values (e.g. "no_data") can still be returned alongside a
+            # well-formed payload. Our training pipeline only cares about having valid
+            # timestamps/prices, so we prefer to rely on the presence of "t"/"c" instead
+            # of strictly gating on data["s"] == "ok".
+            status = data.get("s")
+            if status != "ok":
+                logger.warning(f"Benchmarks status for {asset}: {status}, raw response: {data}")
+
+            timestamps = data.get("t") or []
+            closes = data.get("c") or []
+
+            if not timestamps or not closes:
+                logger.warning(f"No Benchmarks data points for {asset} with params={params}")
                 return None
-                
+
             return data
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching Benchmarks data: {e}")
             return None
