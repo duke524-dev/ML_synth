@@ -7,8 +7,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Tuple
 from scipy.stats import t as student_t
 
-from .config import FALLBACK_PRICES
-from .path_sampling import sample_student_t
+from config import FALLBACK_PRICES
+from path_sampling import sample_student_t
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from typing import Optional, Dict, List, Tuple
 import requests
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
-from .config import (
+from config import (
     BASE_URL, HERMES_BASE_URL, TOKEN_MAP, HERMES_FEED_IDS,
     FALLBACK_PRICES
 )

@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from scipy.stats import t as student_t
 
-from .config import LATENT_VOL_PARAMS
+from config import LATENT_VOL_PARAMS
 
 logger = logging.getLogger(__name__)
 

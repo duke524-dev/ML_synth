@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Tuple, Optional
 import pytz
 
-from .config import HF_ASSETS, LF_EQUITY_ASSETS
+from config import HF_ASSETS, LF_EQUITY_ASSETS
 
 logger = logging.getLogger(__name__)
 

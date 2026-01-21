@@ -7,8 +7,8 @@ from typing import Optional, List, Tuple, Dict
 import threading
 import time
 
-from .data_fetcher import BenchmarksFetcher, parse_benchmarks_data
-from .config import (
+from data_fetcher import BenchmarksFetcher, parse_benchmarks_data
+from config import (
     HF_CACHE_MIN_HOURS, LF_CACHE_MIN_DAYS,
     HF_LOOKBACK_HOURS, LF_LOOKBACK_DAYS,
     HF_REFRESH_INTERVAL_MIN, HF_REFRESH_INTERVAL_MAX,

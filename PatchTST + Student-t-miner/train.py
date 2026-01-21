@@ -12,10 +12,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
-from .model import PatchTSTModel
-from .data_fetcher import BenchmarksFetcher, parse_benchmarks_data
-from .features import extract_hf_features, extract_lf_features
-from .config import HF_ASSETS, LF_CRYPTO_ASSETS, LF_EQUITY_ASSETS
+from model import PatchTSTModel
+from data_fetcher import BenchmarksFetcher, parse_benchmarks_data
+from features import extract_hf_features, extract_lf_features
+from config import HF_ASSETS, LF_CRYPTO_ASSETS, LF_EQUITY_ASSETS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict
 import numpy as np
 
-from .config import (
+from config import (
     HF_CALIBRATION_HORIZONS, LF_CALIBRATION_HORIZONS,
     HF_CALIBRATION_WEIGHTS, LF_CALIBRATION_WEIGHTS,
     HF_CALIBRATION_ALPHA, LF_CALIBRATION_ALPHA,
@@ -17,8 +17,8 @@ from .config import (
     HF_MAX_MOVE, LF_MAX_MOVE,
     HF_MIN_COUNT, LF_MIN_COUNT,
 )
-from .forecast_engine import ForecastEngine
-from .data_fetcher import BenchmarksFetcher, parse_benchmarks_data
+from forecast_engine import ForecastEngine
+from data_fetcher import BenchmarksFetcher, parse_benchmarks_data
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
