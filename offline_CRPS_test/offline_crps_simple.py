@@ -122,6 +122,12 @@ def run_daily_baseline_crps_for_prompt(
     minutes_per_day = 24 * 60
     cycles_per_day = minutes_per_day // prompt_cfg.total_cycle_minutes
 
+    # Use EWMA state-update function when test_wrapper is already loaded (e.g. run_crps_test)
+    update_states_fn = None
+    if "test_wrapper" in sys.modules:
+        mod = sys.modules["test_wrapper"]
+        update_states_fn = getattr(mod, "update_states_from_price_data", None)
+
     for asset in prompt_cfg.asset_list:
         for cycle_idx in range(cycles_per_day):
             # Real validator starts a prompt every total_cycle_minutes
@@ -188,6 +194,18 @@ def run_daily_baseline_crps_for_prompt(
                 rec["error"] = f"no_valid_price_at_{start_iso}"
                 all_prompt_results.append(rec)
                 continue
+
+            # 0) Update state from price data up to prompt_start (if supported by miner)
+            if update_states_fn is not None:
+                try:
+                    update_states_fn(
+                        asset=asset,
+                        prices=series_1m,
+                        base_start=base_start,
+                        target_time=prompt_start,
+                    )
+                except Exception:
+                    pass
 
             # 1) Call baseline simulation generator with patched get_asset_price
             # This avoids the live HTTP call to hermes.pyth.network
