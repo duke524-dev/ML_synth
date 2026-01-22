@@ -1,0 +1,387 @@
+#!/usr/bin/env python3
+"""
+Grid-search EWMA Student-t degrees of freedom (nu) per asset to minimize offline CRPS.
+
+This script reuses the existing offline CRPS harness in `offline_CRPS_test/offline_crps_simple.py`,
+but patches `synth.miner.simulations.generate_simulations` to use the EWMA miner via `test_wrapper`.
+
+Notes
+-----
+- In EWMA-miner, Student-t degrees of freedom is controlled by `NU[asset]` in `config.py`.
+- Unlike half-life, `nu` is a single parameter per asset (not separate for HF/LF).
+- However, we test separately for HIGH_FREQUENCY and LOW_FREQUENCY prompts to see if
+  different `nu` values optimize differently for different time scales.
+- `nu` must be > 2 for Student-t variance to exist.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+from dataclasses import replace
+from typing import Iterable
+from datetime import timedelta
+
+
+def _parse_grid_nu(grid: str) -> list[float]:
+    """Parse comma-separated nu values (floats)"""
+    vals: list[float] = []
+    for part in grid.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        val = float(p)
+        if val <= 2.0:
+            raise ValueError(f"nu must be > 2.0, got {val}")
+        vals.append(val)
+    if not vals:
+        raise ValueError("empty grid")
+    return sorted(vals)  # Sort for consistent ordering
+
+
+def _objective_from_results(all_prompt_results: list[dict]) -> tuple[float, int]:
+    total = 0.0
+    n = 0
+    for r in all_prompt_results:
+        v = r.get("overall_crps")
+        if v is None:
+            continue
+        total += float(v)
+        n += 1
+    return total, n
+
+
+def _run_for_asset(
+    *,
+    asset: str,
+    prompt_cfg,
+    prompt_label: str,
+    start_dt,
+    num_days: int,
+    price_cache,
+) -> tuple[float, int]:
+    # Import locally so the patching in main() is already active
+    from offline_CRPS_test.offline_crps_simple import run_daily_baseline_crps_for_prompt
+
+    # Keep everything identical to validator config but restrict to one asset
+    cfg_one = replace(prompt_cfg, asset_list=[asset])
+
+    all_prompt_results: list[dict] = []
+    for day_offset in range(num_days):
+        day_dt = start_dt + timedelta(days=day_offset)
+        run_daily_baseline_crps_for_prompt(
+            prompt_cfg=cfg_one,
+            prompt_label=prompt_label,
+            day_start=day_dt,
+            all_prompt_results=all_prompt_results,
+            price_cache=price_cache,
+        )
+
+    return _objective_from_results(all_prompt_results)
+
+
+def _iter_assets(which: str) -> Iterable[str]:
+    if which.lower() == "all":
+        import config as ewma_config
+
+        yield from list(ewma_config.TOKEN_MAP.keys())
+        return
+    for a in which.split(","):
+        a = a.strip()
+        if a:
+            yield a
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Calibrate EWMA Student-t nu per asset (offline CRPS).")
+    p.add_argument("--start-day", type=str, required=True, help="YYYY-MM-DD (UTC)")
+    p.add_argument("--num-days", type=int, required=True, help="Number of days to test")
+    p.add_argument(
+        "--assets",
+        type=str,
+        default="BTC,ETH,SOL,XAU,SPYX,NVDAX,TSLAX,AAPLX,GOOGLX",
+        help='Comma list (or "all")',
+    )
+    p.add_argument(
+        "--prompt-type",
+        choices=["high", "low", "both"],
+        default="both",
+        help="Which prompt(s) to optimize against",
+    )
+    p.add_argument(
+        "--grid-nu",
+        type=str,
+        default="2.1,3,5,7,10,15,20,30",
+        help="Comma-separated nu candidates (must be > 2.0)",
+    )
+    p.add_argument(
+        "--state-root",
+        type=str,
+        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "state_calib_nu"),
+        help="Directory to store per-trial state (kept for debugging/reuse)",
+    )
+    return p.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+
+    # Ensure project root + EWMA-miner are importable
+    ewma_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(ewma_dir)
+    sys.path.insert(0, ewma_dir)
+    sys.path.insert(0, project_root)
+
+    print(
+        "[calibrate] start "
+        f"start_day={args.start_day} num_days={args.num_days} "
+        f"prompt_type={args.prompt_type} assets={args.assets} "
+        f"grid_nu={args.grid_nu} state_root={args.state_root}",
+        flush=True,
+    )
+
+    # Patch synth.miner.simulations to use EWMA miner
+    import test_wrapper
+    from test_wrapper import generate_simulations, get_asset_price
+
+    import synth.miner.simulations as sim_mod
+
+    sim_mod.generate_simulations = generate_simulations
+    sim_mod.get_asset_price = get_asset_price
+
+    # Load offline CRPS helpers
+    from datetime import datetime, timezone
+
+    from offline_CRPS_test.offline_crps_simple import build_price_cache
+    from synth.validator import prompt_config
+    import config as ewma_config
+
+    grid_nu = _parse_grid_nu(args.grid_nu)
+    os.makedirs(args.state_root, exist_ok=True)
+
+    start_dt = datetime.fromisoformat(args.start_day).replace(tzinfo=timezone.utc)
+    price_cache = build_price_cache(start_dt, args.num_days)
+
+    def eval_trial(asset: str, nu: float, prompt_kind: str) -> tuple[float, int]:
+        # Apply candidate by mutating the shared dict in-place
+        ewma_config.NU[asset] = nu
+
+        # Use isolated persisted state per (asset, prompt_kind, candidate)
+        # Format nu with 1 decimal place for directory name
+        nu_str = f"{nu:.1f}".replace(".", "_")
+        trial_state_dir = os.path.join(
+            args.state_root,
+            f"{asset}_{prompt_kind}_nu_{nu_str}",
+        )
+        os.makedirs(trial_state_dir, exist_ok=True)
+        test_wrapper.set_state_dir(trial_state_dir, reset=True)
+
+        t0 = time.monotonic()
+        print(
+            f"[calibrate] trial_start asset={asset} kind={prompt_kind} "
+            f"nu={nu:.2f} state_dir={trial_state_dir}",
+            flush=True,
+        )
+
+        if prompt_kind == "high":
+            total, n = _run_for_asset(
+                asset=asset,
+                prompt_cfg=prompt_config.HIGH_FREQUENCY,
+                prompt_label="HIGH_FREQUENCY",
+                start_dt=start_dt,
+                num_days=args.num_days,
+                price_cache=price_cache,
+            )
+        else:
+            total, n = _run_for_asset(
+                asset=asset,
+                prompt_cfg=prompt_config.LOW_FREQUENCY,
+                prompt_label="LOW_FREQUENCY",
+                start_dt=start_dt,
+                num_days=args.num_days,
+                price_cache=price_cache,
+            )
+
+        dt_s = time.monotonic() - t0
+        avg = (total / n) if n else float("nan")
+        print(
+            f"[calibrate] trial_done  asset={asset} kind={prompt_kind} "
+            f"nu={nu:.2f} avg_crps={avg:.6f} n={n} elapsed_s={dt_s:.1f}",
+            flush=True,
+        )
+        return total, n
+
+    assets = list(_iter_assets(args.assets))
+    print(f"[calibrate] assets_resolved n_assets={len(assets)} assets={assets}", flush=True)
+
+    # Collect results for file output
+    results_summary = {
+        "start_day": args.start_day,
+        "num_days": args.num_days,
+        "prompt_type": args.prompt_type,
+        "grid_nu": grid_nu,
+        "best_high": {},  # HIGH_FREQUENCY results
+        "best_low": {},  # LOW_FREQUENCY results
+    }
+
+    # Print results in a config-friendly way (copy/paste into EWMA-miner/config.py)
+    for asset_idx, asset in enumerate(assets, start=1):
+        print(f"[calibrate] asset_start {asset_idx}/{len(assets)} asset={asset}", flush=True)
+        
+        if args.prompt_type in ("high", "both"):
+            best = None
+            for nu_idx, nu in enumerate(grid_nu, start=1):
+                print(
+                    f"[calibrate] progress asset={asset} kind=high "
+                    f"candidate={nu_idx}/{len(grid_nu)} nu={nu:.2f}",
+                    flush=True,
+                )
+                total, n = eval_trial(asset, nu, "high")
+                if n == 0:
+                    continue
+                avg = total / n
+                if best is None or avg < best["avg"]:
+                    best = {"nu": nu, "avg": avg, "n": n}
+                print(f"[high] asset={asset} nu={nu:>5.2f} avg_crps={avg:.6f} n={n}")
+            if best is not None:
+                results_summary["best_high"][asset] = best
+                print(
+                    f"[high] BEST asset={asset} -> NU['{asset}'] = {best['nu']:.1f}  "
+                    f"(avg_crps={best['avg']:.6f}, n={best['n']})"
+                )
+
+        if args.prompt_type in ("low", "both"):
+            best = None
+            for nu_idx, nu in enumerate(grid_nu, start=1):
+                print(
+                    f"[calibrate] progress asset={asset} kind=low  "
+                    f"candidate={nu_idx}/{len(grid_nu)} nu={nu:.2f}",
+                    flush=True,
+                )
+                total, n = eval_trial(asset, nu, "low")
+                if n == 0:
+                    continue
+                avg = total / n
+                if best is None or avg < best["avg"]:
+                    best = {"nu": nu, "avg": avg, "n": n}
+                print(f"[low ] asset={asset} nu={nu:>5.2f} avg_crps={avg:.6f} n={n}")
+            if best is not None:
+                results_summary["best_low"][asset] = best
+                print(
+                    f"[low ] BEST asset={asset} -> NU['{asset}'] = {best['nu']:.1f}  "
+                    f"(avg_crps={best['avg']:.6f}, n={best['n']})"
+                )
+
+        print(f"[calibrate] asset_done  {asset_idx}/{len(assets)} asset={asset}", flush=True)
+
+    # Save results to file
+    from datetime import datetime as dt
+    timestamp = dt.utcnow().strftime("%Y%m%d_%H%M%S")
+    results_file = os.path.join(
+        ewma_dir,
+        f"calibration_results_nu_{args.start_day.replace('-', '')}_{args.prompt_type}_{timestamp}.txt"
+    )
+    
+    with open(results_file, "w") as f:
+        f.write("=" * 80 + "\n")
+        f.write("EWMA STUDENT-T NU CALIBRATION RESULTS\n")
+        f.write("=" * 80 + "\n\n")
+        f.write(f"Calibration Date: {dt.utcnow().isoformat()}Z\n")
+        f.write(f"Test Period: {args.start_day} ({args.num_days} day(s))\n")
+        f.write(f"Prompt Type: {args.prompt_type}\n")
+        f.write(f"Grid (nu): {', '.join(f'{nu:.1f}' for nu in grid_nu)}\n")
+        f.write(f"Assets: {', '.join(assets)}\n")
+        f.write("\n" + "=" * 80 + "\n\n")
+        
+        # Summary of best values
+        f.write("BEST NU VALUES\n")
+        f.write("-" * 80 + "\n\n")
+        
+        if results_summary["best_high"]:
+            f.write("NU (for HIGH_FREQUENCY prompts, dt=60s):\n")
+            f.write("-" * 80 + "\n")
+            for asset in sorted(results_summary["best_high"].keys()):
+                best = results_summary["best_high"][asset]
+                f.write(f"  '{asset}': {best['nu']:.1f},  # avg_crps={best['avg']:.6f}, n={best['n']}\n")
+            f.write("\n")
+        
+        if results_summary["best_low"]:
+            f.write("NU (for LOW_FREQUENCY prompts, dt=300s):\n")
+            f.write("-" * 80 + "\n")
+            for asset in sorted(results_summary["best_low"].keys()):
+                best = results_summary["best_low"][asset]
+                f.write(f"  '{asset}': {best['nu']:.1f},  # avg_crps={best['avg']:.6f}, n={best['n']}\n")
+            f.write("\n")
+        
+        # Config-ready format
+        f.write("\n" + "=" * 80 + "\n")
+        f.write("CONFIG.PY READY FORMAT (copy/paste into EWMA-miner/config.py)\n")
+        f.write("=" * 80 + "\n\n")
+        
+        f.write("# Student-t degrees of freedom (nu)\n")
+        f.write("# Note: If testing both high and low, you may want to use the average\n")
+        f.write("# or choose based on which prompt type is more important for your use case.\n")
+        f.write("NU = {\n")
+        
+        # If both prompt types were tested, show both and let user decide
+        if results_summary["best_high"] and results_summary["best_low"]:
+            # Show high frequency results
+            f.write("    # HIGH_FREQUENCY optimized values:\n")
+            for asset in sorted(results_summary["best_high"].keys()):
+                best = results_summary["best_high"][asset]
+                f.write(f"    # '{asset}': {best['nu']:.1f},  # high: avg_crps={best['avg']:.6f}\n")
+            
+            f.write("\n    # LOW_FREQUENCY optimized values:\n")
+            for asset in sorted(results_summary["best_low"].keys()):
+                best = results_summary["best_low"][asset]
+                f.write(f"    # '{asset}': {best['nu']:.1f},  # low: avg_crps={best['avg']:.6f}\n")
+            
+            f.write("\n    # Recommended: Use average or pick based on primary use case\n")
+            # Compute average for assets that appear in both
+            common_assets = set(results_summary["best_high"].keys()) & set(results_summary["best_low"].keys())
+            for asset in sorted(common_assets):
+                nu_high = results_summary["best_high"][asset]["nu"]
+                nu_low = results_summary["best_low"][asset]["nu"]
+                nu_avg = (nu_high + nu_low) / 2.0
+                crps_high = results_summary["best_high"][asset]["avg"]
+                crps_low = results_summary["best_low"][asset]["avg"]
+                f.write(f"    \"{asset}\": {nu_avg:.1f},  # avg of high={nu_high:.1f} (crps={crps_high:.6f}) "
+                       f"and low={nu_low:.1f} (crps={crps_low:.6f})\n")
+            
+            # Assets only in one category
+            only_high = set(results_summary["best_high"].keys()) - set(results_summary["best_low"].keys())
+            only_low = set(results_summary["best_low"].keys()) - set(results_summary["best_high"].keys())
+            
+            for asset in sorted(only_high):
+                best = results_summary["best_high"][asset]
+                f.write(f"    \"{asset}\": {best['nu']:.1f},  # high only: avg_crps={best['avg']:.6f}\n")
+            
+            for asset in sorted(only_low):
+                best = results_summary["best_low"][asset]
+                f.write(f"    \"{asset}\": {best['nu']:.1f},  # low only: avg_crps={best['avg']:.6f}\n")
+        elif results_summary["best_high"]:
+            # Only high frequency
+            for asset in sorted(results_summary["best_high"].keys()):
+                best = results_summary["best_high"][asset]
+                f.write(f"    \"{asset}\": {best['nu']:.1f},  # avg_crps={best['avg']:.6f}\n")
+        elif results_summary["best_low"]:
+            # Only low frequency
+            for asset in sorted(results_summary["best_low"].keys()):
+                best = results_summary["best_low"][asset]
+                f.write(f"    \"{asset}\": {best['nu']:.1f},  # avg_crps={best['avg']:.6f}\n")
+        
+        f.write("}\n")
+        
+        f.write("\n" + "=" * 80 + "\n")
+        f.write(f"Results saved to: {results_file}\n")
+        f.write("=" * 80 + "\n")
+    
+    print(f"\n[calibrate] Results saved to: {results_file}", flush=True)
+    
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
