@@ -40,28 +40,47 @@ BARS_1M = RETENTION_DAYS * MINUTES_PER_DAY  # ~10,080 bars
 BARS_5M = RETENTION_DAYS * (MINUTES_PER_DAY // 5)  # ~2,016 bars
 
 # EWMA half-lives (in seconds, converted to lambda per dt)
+# HALF_LIFE_1M = {
+#     "BTC": 120 * 60,  # 120 minutes
+#     "ETH": 120 * 60,
+#     "SOL": 120 * 60,
+#     "XAU": 240 * 60,  # 240 minutes
+#     "SPYX": 240 * 60,
+#     "NVDAX": 240 * 60,
+#     "TSLAX": 240 * 60,
+#     "AAPLX": 240 * 60,
+#     "GOOGLX": 240 * 60,
+# }
+
 HALF_LIFE_1M = {
-    "BTC": 120 * 60,  # 120 minutes
-    "ETH": 120 * 60,
-    "SOL": 120 * 60,
-    "XAU": 240 * 60,  # 240 minutes
-    "SPYX": 240 * 60,
-    "NVDAX": 240 * 60,
-    "TSLAX": 240 * 60,
-    "AAPLX": 240 * 60,
-    "GOOGLX": 240 * 60,
+    "BTC": 900,  # 15 minutes, lambda=0.954842, avg_crps=718.699953
+    "ETH": 900,  # 15 minutes, lambda=0.954842, avg_crps=933.388881
+    "SOL": 1800,  # 30 minutes, lambda=0.977160, avg_crps=1227.728625
+    "XAU": 900,  # 15 minutes, lambda=0.954842, avg_crps=339.870880
 }
 
+# HALF_LIFE_5M = {
+#     "BTC": 12 * 3600,  # 12 hours
+#     "ETH": 12 * 3600,
+#     "SOL": 12 * 3600,
+#     "XAU": 18 * 3600,  # 18 hours
+#     "SPYX": 24 * 3600,  # 24 hours
+#     "NVDAX": 24 * 3600,
+#     "TSLAX": 24 * 3600,
+#     "AAPLX": 24 * 3600,
+#     "GOOGLX": 24 * 3600,
+# }
+
 HALF_LIFE_5M = {
-    "BTC": 12 * 3600,  # 12 hours
-    "ETH": 12 * 3600,
-    "SOL": 12 * 3600,
-    "XAU": 18 * 3600,  # 18 hours
-    "SPYX": 24 * 3600,  # 24 hours
-    "NVDAX": 24 * 3600,
-    "TSLAX": 24 * 3600,
-    "AAPLX": 24 * 3600,
-    "GOOGLX": 24 * 3600,
+    "AAPLX": 3600,  # 1 hours, lambda=0.943874, avg_crps=1419.814763
+    "BTC": 3600,  # 1 hours, lambda=0.943874, avg_crps=2676.698297
+    "ETH": 3600,  # 1 hours, lambda=0.943874, avg_crps=3412.704547
+    "GOOGLX": 14400,  # 4 hours, lambda=0.985663, avg_crps=2067.576918
+    "NVDAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1794.930340
+    "SOL": 7200,  # 2 hours, lambda=0.971532, avg_crps=4431.903435
+    "SPYX": 3600,  # 1 hours, lambda=0.943874, avg_crps=1316.974182
+    "TSLAX": 3600,  # 1 hours, lambda=0.943874, avg_crps=1800.990672
+    "XAU": 3600,  # 1 hours, lambda=0.943874, avg_crps=1402.122978
 }
 
 # Student-t degrees of freedom (nu)
