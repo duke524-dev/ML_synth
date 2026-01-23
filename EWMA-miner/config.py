@@ -84,11 +84,39 @@ HALF_LIFE_5M = {
 }
 
 # Student-t degrees of freedom (nu)
+# Separate values for 1-minute (high frequency) and 5-minute (low frequency) prompts
+# Calibrated from calibration_results_nu_20260108_both_20260123_041210.txt
+NU_1M = {
+    "BTC": 9.5,  # avg_crps=717.552117 (HIGH_FREQUENCY optimized)
+    "ETH": 7.0,  # avg_crps=932.977186 (HIGH_FREQUENCY optimized)
+    "SOL": 8.0,  # avg_crps=1226.943205 (HIGH_FREQUENCY optimized)
+    "XAU": 9.5,  # avg_crps=339.815651 (HIGH_FREQUENCY optimized)
+    "SPYX": 10.0,  # Not calibrated, using default
+    "NVDAX": 10.0,  # Not calibrated, using default
+    "TSLAX": 10.0,  # Not calibrated, using default
+    "AAPLX": 10.0,  # Not calibrated, using default
+    "GOOGLX": 10.0,  # Not calibrated, using default
+}
+
+NU_5M = {
+    "BTC": 6.5,  # avg_crps=2677.208480 (LOW_FREQUENCY optimized)
+    "ETH": 8.5,  # avg_crps=3410.764007 (LOW_FREQUENCY optimized)
+    "SOL": 4.0,  # avg_crps=4423.264927 (LOW_FREQUENCY optimized)
+    "XAU": 3.0,  # avg_crps=1348.498700 (LOW_FREQUENCY optimized)
+    "SPYX": 10.0,  # Not calibrated, using default
+    "NVDAX": 10.0,  # Not calibrated, using default
+    "TSLAX": 10.0,  # Not calibrated, using default
+    "AAPLX": 10.0,  # Not calibrated, using default
+    "GOOGLX": 10.0,  # Not calibrated, using default
+}
+
+# Legacy: kept for backward compatibility (fallback if not found in NU_1M/NU_5M)
+# Using averages of NU_1M and NU_5M for calibrated assets
 NU = {
-    "BTC": 6.0,
-    "ETH": 6.0,
-    "SOL": 6.0,
-    "XAU": 8.0,
+    "BTC": 8.0,  # avg of high=9.5 and low=6.5
+    "ETH": 7.8,  # avg of high=7.0 and low=8.5
+    "SOL": 6.0,  # avg of high=8.0 and low=4.0
+    "XAU": 6.2,  # avg of high=9.5 and low=3.0
     "SPYX": 10.0,
     "NVDAX": 10.0,
     "TSLAX": 10.0,

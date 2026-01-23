@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Tuple
 from scipy.stats import t as student_t
 
-from config import NU, EQUITY_OFF_HOURS_MULT, LF_EQUITY_ASSETS
+from config import NU_1M, NU_5M, NU, EQUITY_OFF_HOURS_MULT, LF_EQUITY_ASSETS
 from volatility_state import VolatilityState
 
 logger = logging.getLogger(__name__)
@@ -20,13 +20,10 @@ class SimulationEngine:
         self.vol_state_1m = vol_state_1m
         self.vol_state_5m = vol_state_5m
         self.asset = vol_state_1m.asset
-        self.nu = NU.get(self.asset, 6.0)
-        
-        # Standardization factor for Student-t
-        if self.nu > 2:
-            self.std_factor = np.sqrt(self.nu / (self.nu - 2))
-        else:
-            self.std_factor = 1.0  # Fallback
+        # nu will be selected dynamically based on time_increment in generate_paths
+        # Store default for backward compatibility
+        self.nu_default = NU.get(self.asset, 6.0)
+        self.std_factor_default = np.sqrt(self.nu_default / (self.nu_default - 2)) if self.nu_default > 2 else 1.0
     
     def generate_paths(
         self,
@@ -63,13 +60,21 @@ class SimulationEngine:
         if H * time_increment != time_length:
             raise ValueError(f"time_length must be divisible by time_increment")
         
-        # Select volatility state
+        # Select volatility state and nu based on time_increment
         if time_increment == 60:
             vol_state = self.vol_state_1m
+            nu = NU_1M.get(self.asset, NU.get(self.asset, 6.0))
         elif time_increment == 300:
             vol_state = self.vol_state_5m
+            nu = NU_5M.get(self.asset, NU.get(self.asset, 6.0))
         else:
             raise ValueError(f"Unsupported time_increment: {time_increment}")
+        
+        # Compute standardization factor for this nu
+        if nu > 2:
+            std_factor = np.sqrt(nu / (nu - 2))
+        else:
+            std_factor = 1.0  # Fallback
         
         # Get initial variance
         h_0 = vol_state.get_variance()
@@ -89,7 +94,7 @@ class SimulationEngine:
             f"anchor_price={anchor_price:.2f}, "
             f"h_0={h_0:.8f}, volatility={np.sqrt(h_0):.6f}, "
             f"time_increment={time_increment}s, time_length={time_length}s, "
-            f"num_simulations={num_simulations}"
+            f"num_simulations={num_simulations}, nu={nu:.1f}"
         )
         
         # Pre-allocate arrays (float32 for memory efficiency)
@@ -105,9 +110,9 @@ class SimulationEngine:
             sigma_t = np.sqrt(h_paths)
             
             # Sample Student-t shocks (vectorized over paths)
-            eps_raw = student_t.rvs(df=self.nu, size=num_simulations)
+            eps_raw = student_t.rvs(df=nu, size=num_simulations)
             # Standardize to unit variance
-            eps = eps_raw / self.std_factor
+            eps = eps_raw / std_factor
             
             # Generate log returns: r_t = sigma_t * eps (no drift for short horizons)
             log_returns = sigma_t * eps
