@@ -90,10 +90,10 @@ HALF_LIFE_5M = {
 # Student-t degrees of freedom (nu)
 # Can be recalibrated separately
 NU_1M = {
-    "BTC": 9.5,
-    "ETH": 7.0,
-    "SOL": 8.0,
-    "XAU": 9.5,
+    "BTC": 10.0,
+    "ETH": 9.0,
+    "SOL": 7.0,
+    "XAU": 6.0,
     "SPYX": 10.0,
     "NVDAX": 10.0,
     "TSLAX": 10.0,
@@ -102,10 +102,10 @@ NU_1M = {
 }
 
 NU_5M = {
-    "BTC": 6.5,
-    "ETH": 8.5,
-    "SOL": 4.0,
-    "XAU": 3.0,
+    "BTC": 9.0,
+    "ETH": 10.0,
+    "SOL": 5.0,
+    "XAU": 5.5,
     "SPYX": 10.0,
     "NVDAX": 10.0,
     "TSLAX": 10.0,

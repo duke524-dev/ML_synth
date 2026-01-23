@@ -41,6 +41,9 @@ class LGBMTrainer:
         
         # Store trained models per lead
         self.models: Dict[int, lgb.Booster] = {}
+        
+        # Store feature names for each model to ensure consistency
+        self.feature_names: Dict[int, List[str]] = {}
     
     def create_features(
         self,
@@ -65,6 +68,18 @@ class LGBMTrainer:
             'high': highs,
             'low': lows,
         })
+        
+        # Ensure prices are positive (avoid log(0) errors)
+        df['close'] = df['close'].replace(0, np.nan).ffill().bfill()
+        df['open'] = df['open'].replace(0, np.nan).ffill().bfill()
+        df['high'] = df['high'].replace(0, np.nan).ffill().bfill()
+        df['low'] = df['low'].replace(0, np.nan).ffill().bfill()
+        
+        # Handle any remaining zeros with a small positive value
+        df['close'] = df['close'].clip(lower=1e-10)
+        df['open'] = df['open'].clip(lower=1e-10)
+        df['high'] = df['high'].clip(lower=1e-10)
+        df['low'] = df['low'].clip(lower=1e-10)
         
         # Log prices for better scaling
         df['log_close'] = np.log(df['close'])
@@ -235,6 +250,9 @@ class LGBMTrainer:
             ]
         )
         
+        # Store feature names for this model
+        self.feature_names[lead_seconds] = feature_cols.copy()
+        
         return model
     
     def train_with_stochastic_sampling(
@@ -317,6 +335,9 @@ class LGBMTrainer:
             ]
         )
         
+        # Store feature names for this model
+        self.feature_names[lead_seconds] = feature_cols.copy()
+        
         return model
     
     def train(
@@ -374,8 +395,13 @@ class LGBMTrainer:
                 self.model_dir,
                 f"{self.asset}_{'HF' if self.is_hf else 'LF'}_{lead_seconds}.pkl"
             )
+            # Save model and feature names together
+            model_data = {
+                'model': model,
+                'feature_names': self.feature_names.get(lead_seconds, [])
+            }
             with open(model_path, 'wb') as f:
-                pickle.dump(model, f)
+                pickle.dump(model_data, f)
             logger.info(f"Saved model: {model_path}")
     
     def load_models(self) -> bool:
@@ -389,7 +415,19 @@ class LGBMTrainer:
             if os.path.exists(model_path):
                 try:
                     with open(model_path, 'rb') as f:
-                        self.models[lead_seconds] = pickle.load(f)
+                        data = pickle.load(f)
+                        # Handle both old format (just model) and new format (dict with model and features)
+                        if isinstance(data, dict):
+                            self.models[lead_seconds] = data['model']
+                            self.feature_names[lead_seconds] = data.get('feature_names', [])
+                        else:
+                            # Old format - just the model
+                            self.models[lead_seconds] = data
+                            # Try to get feature names from model if available
+                            if hasattr(data, 'feature_name'):
+                                self.feature_names[lead_seconds] = data.feature_name()
+                            else:
+                                self.feature_names[lead_seconds] = []
                     loaded = True
                     logger.info(f"Loaded model: {model_path}")
                 except Exception as e:

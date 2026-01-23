@@ -134,7 +134,20 @@ class UncertaintyEngine:
                 # Truncate
                 center_path = center_path[:H]
         
-        center_prices = np.exp(center_path)
+        # Convert center path from log prices to prices with validation
+        center_prices = np.exp(np.clip(center_path, -50, 50))  # Clip to prevent overflow
+        
+        # Validate center prices - replace invalid values with anchor price
+        center_prices = np.where(
+            np.isfinite(center_prices) & (center_prices > 0),
+            center_prices,
+            anchor_price
+        )
+        
+        logger.debug(
+            f"Center prices: min={center_prices.min():.2f}, max={center_prices.max():.2f}, "
+            f"mean={center_prices.mean():.2f}"
+        )
         
         # Pre-allocate arrays (float32 for memory efficiency)
         paths = np.zeros((num_simulations, H + 1), dtype=np.float32)
@@ -162,13 +175,36 @@ class UncertaintyEngine:
             # Generate log returns: r_t = (log(center_price / prev_price)) + sigma_t * eps
             # This adds uncertainty around the center path
             prev_price = paths[:, t]
+            
+            # Safeguard: ensure prev_price is positive and non-zero
+            prev_price = np.maximum(prev_price, 1e-10)
+            
+            # Safeguard: ensure center_price is valid
+            if not np.isfinite(center_price) or center_price <= 0:
+                center_price = anchor_price
+            
+            # Calculate center log return with safeguard
             center_log_return = np.log(center_price / prev_price)
+            
+            # Clip extreme log returns to prevent overflow
+            center_log_return = np.clip(center_log_return, -1.0, 1.0)
             
             # Add uncertainty: r_t = center_log_return + sigma_t * eps
             log_returns = center_log_return + sigma_t * eps
             
+            # Clip log returns to prevent overflow in exp
+            log_returns = np.clip(log_returns, -2.0, 2.0)
+            
             # Update prices: P_t = P_{t-1} * exp(r_t)
             paths[:, t + 1] = paths[:, t] * np.exp(log_returns)
+            
+            # Safeguard: ensure prices stay positive and finite
+            paths[:, t + 1] = np.maximum(paths[:, t + 1], 1e-10)
+            paths[:, t + 1] = np.where(
+                np.isfinite(paths[:, t + 1]), 
+                paths[:, t + 1], 
+                anchor_price
+            )
             
             # Update variance with volatility clustering:
             # h <- lambda * h + (1 - lambda) * r^2
