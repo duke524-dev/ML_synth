@@ -52,11 +52,12 @@ BARS_5M = RETENTION_DAYS * (MINUTES_PER_DAY // 5)  # ~2,016 bars
 #     "GOOGLX": 240 * 60,
 # }
 
+# EWMA half-lives (in seconds, converted to lambda per dt)
 HALF_LIFE_1M = {
-    "BTC": 900,  # 15 minutes, lambda=0.954842, avg_crps=718.699953
-    "ETH": 900,  # 15 minutes, lambda=0.954842, avg_crps=933.388881
-    "SOL": 1800,  # 30 minutes, lambda=0.977160, avg_crps=1227.728625
-    "XAU": 900,  # 15 minutes, lambda=0.954842, avg_crps=339.870880
+    "BTC": 900,  # 15 minutes, lambda=0.954842, avg_crps=712.907593
+    "ETH": 900,  # 15 minutes, lambda=0.954842, avg_crps=926.863937
+    "SOL": 1800,  # 30 minutes, lambda=0.977160, avg_crps=1225.116436
+    "XAU": 900,  # 15 minutes, lambda=0.954842, avg_crps=341.419342
 }
 
 # HALF_LIFE_5M = {
@@ -72,15 +73,15 @@ HALF_LIFE_1M = {
 # }
 
 HALF_LIFE_5M = {
-    "AAPLX": 3600,  # 1 hours, lambda=0.943874, avg_crps=1419.814763
-    "BTC": 3600,  # 1 hours, lambda=0.943874, avg_crps=2676.698297
-    "ETH": 3600,  # 1 hours, lambda=0.943874, avg_crps=3412.704547
-    "GOOGLX": 14400,  # 4 hours, lambda=0.985663, avg_crps=2067.576918
-    "NVDAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1794.930340
-    "SOL": 7200,  # 2 hours, lambda=0.971532, avg_crps=4431.903435
-    "SPYX": 3600,  # 1 hours, lambda=0.943874, avg_crps=1316.974182
-    "TSLAX": 3600,  # 1 hours, lambda=0.943874, avg_crps=1800.990672
-    "XAU": 3600,  # 1 hours, lambda=0.943874, avg_crps=1402.122978
+    "AAPLX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1312.533006
+    "BTC": 3600,  # 1 hours, lambda=0.943874, avg_crps=2518.492630
+    "ETH": 3600,  # 1 hours, lambda=0.943874, avg_crps=3252.633827
+    "GOOGLX": 14400,  # 4 hours, lambda=0.985663, avg_crps=1986.880167
+    "NVDAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1678.214929
+    "SOL": 14400,  # 4 hours, lambda=0.985663, avg_crps=4367.582809
+    "SPYX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1190.991773
+    "TSLAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1657.966073
+    "XAU": 7200,  # 2 hours, lambda=0.971532, avg_crps=1260.446896
 }
 
 # Student-t degrees of freedom (nu)
