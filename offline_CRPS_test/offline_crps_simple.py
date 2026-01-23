@@ -523,24 +523,64 @@ def main() -> int:
     all_prompt_results: List[PromptResult] = []
 
     # Prefetch 1-minute prices for all assets and days in the range
-    # Note: We fetch num_days + 1 because 24h predictions may span into the next day
-    prefetch_days = num_days + 1
-    prefetch_end_dt = start_dt + timedelta(days=prefetch_days - 1)
+    # Note: We fetch num_days + 2 total:
+    #   - 1 day BEFORE start for state warm-up (volatility initialization)
+    #   - num_days for actual testing
+    #   - 1 day AFTER end for cross-day predictions (24h predictions spanning midnight)
+    prefetch_start_dt = start_dt - timedelta(days=1)  # Start one day earlier for warm-up
+    prefetch_days = num_days + 2  # 1 before + num_days + 1 after
+    prefetch_end_dt = prefetch_start_dt + timedelta(days=prefetch_days - 1)
     print(
         f"[PREFETCH] Building 1m price cache for days "
-        f"{start_dt.date().isoformat()} to {prefetch_end_dt.date().isoformat()} "
-        f"(+1 day for cross-day predictions)..."
+        f"{prefetch_start_dt.date().isoformat()} to {prefetch_end_dt.date().isoformat()} "
+        f"(+1 day before for warm-up, +1 day after for cross-day predictions)..."
     )
-    price_cache = build_price_cache(start_dt, prefetch_days)
+    price_cache = build_price_cache(prefetch_start_dt, prefetch_days)
 
     prompt_cfgs = [
         ("LOW_FREQUENCY", prompt_config.LOW_FREQUENCY),
         ("HIGH_FREQUENCY", prompt_config.HIGH_FREQUENCY),
     ]
 
+    # Get state update function if available (for EWMA miner warm-up)
+    update_states_fn = None
+    if "test_wrapper" in sys.modules:
+        mod = sys.modules["test_wrapper"]
+        update_states_fn = getattr(mod, "update_states_from_price_data", None)
+
+    # Get all assets for warm-up
+    low_assets = set(prompt_config.LOW_FREQUENCY.asset_list)
+    high_assets = set(prompt_config.HIGH_FREQUENCY.asset_list)
+    all_assets = sorted(low_assets | high_assets)
+
     for day_offset in range(num_days):
         day_dt = start_dt + timedelta(days=day_offset)
+        prev_day_dt = day_dt - timedelta(days=1)
+        prev_day_key = prev_day_dt.date().isoformat()
+        
         print(f"Running baseline offline CRPS test for day {day_dt.date().isoformat()}...")
+
+        # Warm up state using previous day's data (before any prompts on this day)
+        if update_states_fn is not None:
+            print(f"  [WARM-UP] Initializing volatility state from {prev_day_key} data...")
+            for asset in all_assets:
+                cache_key = (asset, prev_day_key)
+                if cache_key in price_cache:
+                    prev_day_data = price_cache[cache_key]
+                    prev_base_start = datetime.fromisoformat(prev_day_data["start_time_iso"])
+                    prev_series = prev_day_data["prices"]
+                    # Update state through entire previous day (target_time = end of previous day = start of current day)
+                    try:
+                        update_states_fn(
+                            asset=asset,
+                            prices=prev_series,
+                            base_start=prev_base_start,
+                            target_time=day_dt,  # End of previous day = start of current day
+                        )
+                    except Exception as e:
+                        print(f"    Warning: Failed to warm up state for {asset}: {e}")
+                else:
+                    print(f"    Warning: No data for {asset} on {prev_day_key} for warm-up")
 
         for label, cfg in prompt_cfgs:
             print(f"  Prompt type: {label}")
