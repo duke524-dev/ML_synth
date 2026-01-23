@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from data_fetcher import BenchmarksFetcher, parse_benchmarks_ohlc
 from lgbm_trainer import LGBMTrainer
-from config import TOKEN_MAP, HF_ASSETS, LF_CRYPTO_ASSETS, LF_EQUITY_ASSETS, TRAINING_YEARS
+from config import TOKEN_MAP, HF_ASSETS, LF_CRYPTO_ASSETS, LF_EQUITY_ASSETS, TRAINING_YEARS, get_training_days
 from typing import List
 
 logging.basicConfig(
@@ -97,10 +97,12 @@ def train_asset(asset: str, is_hf: bool, model_dir: str = "models",
                 chunk_days=chunk_days, training_days=30, use_cache=use_cache
             )
         else:
-            logger.info(f"Fetching {TRAINING_YEARS} year(s) of training data for {asset}...")
+            training_days = get_training_days(asset)
+            training_months = training_days / 30.44  # Approximate months
+            logger.info(f"Fetching {training_days} days (~{training_months:.1f} months) of training data for {asset}...")
             data = fetcher.fetch_training_data(
                 asset, resolution=1, end_time=end_time, 
-                chunk_days=chunk_days, use_cache=use_cache
+                chunk_days=chunk_days, training_days=training_days, use_cache=use_cache
             )
         
         if data is None:
@@ -248,10 +250,12 @@ def main():
                     chunk_days=args.chunk_days, training_days=30, use_cache=use_cache
                 )
             else:
-                logger.info(f"Fetching {TRAINING_YEARS} year(s) of training data for {asset}...")
+                training_days = get_training_days(asset)
+                training_months = training_days / 30.44  # Approximate months
+                logger.info(f"Fetching {training_days} days (~{training_months:.1f} months) of training data for {asset}...")
                 data = fetcher.fetch_training_data(
                     asset, resolution=1, end_time=end_time, 
-                    chunk_days=args.chunk_days, use_cache=use_cache
+                    chunk_days=args.chunk_days, training_days=training_days, use_cache=use_cache
                 )
             
             if data is None:

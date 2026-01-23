@@ -93,6 +93,11 @@ class LGBMPredictor:
             # Get expected feature names for this model
             expected_features = self.trainer.feature_names.get(lead_seconds, [])
             
+            # Filter out target columns (shouldn't be in features, but filter for safety)
+            expected_features = [f for f in expected_features 
+                               if not f.startswith('target_') 
+                               and f not in ['timestamp', 'datetime', 'close', 'open', 'high', 'low']]
+            
             if expected_features:
                 # Use stored feature names to ensure consistency
                 # Create a dataframe with all expected features, filling missing ones with NaN

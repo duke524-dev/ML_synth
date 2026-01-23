@@ -33,11 +33,29 @@ HF_ASSETS = {"BTC", "ETH", "SOL", "XAU"}
 LF_CRYPTO_ASSETS = {"BTC", "ETH", "SOL", "XAU"}
 LF_EQUITY_ASSETS = {"SPYX", "NVDAX", "TSLAX", "AAPLX", "GOOGLX"}
 
-# Data retention (1 year for training)
+# Data retention
+# Crypto: 1 year, Equities: 6 months (Pyth doesn't support 1 year for equities)
 TRAINING_YEARS = 1
+TRAINING_DAYS_CRYPTO = 365  # 1 year for crypto
+TRAINING_DAYS_EQUITY = 180  # 6 months (half year) for equities
 MINUTES_PER_DAY = 1440
 DAYS_PER_YEAR = 365
 BARS_1M_YEAR = DAYS_PER_YEAR * MINUTES_PER_DAY  # ~525,600 bars
+
+def get_training_days(asset: str) -> int:
+    """
+    Get training days for an asset based on asset type
+    
+    Args:
+        asset: Asset symbol
+        
+    Returns:
+        Number of days to use for training (365 for crypto, 180 for equities)
+    """
+    if asset in LF_EQUITY_ASSETS:
+        return TRAINING_DAYS_EQUITY
+    else:
+        return TRAINING_DAYS_CRYPTO
 
 # Recency weighting half-lives (in days)
 HF_RECENCY_HALF_LIFE_DAYS = 14  # High frequency: 14 days

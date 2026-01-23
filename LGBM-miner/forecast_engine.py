@@ -17,7 +17,7 @@ from lgbm_predictor import LGBMPredictor
 from persistence import StatePersistence
 from config import (
     FALLBACK_PRICES, TOKEN_MAP, HF_ASSETS, LF_CRYPTO_ASSETS, LF_EQUITY_ASSETS,
-    HF_RETRAIN_INTERVAL_DAYS, LF_RETRAIN_INTERVAL_DAYS, TRAINING_YEARS
+    HF_RETRAIN_INTERVAL_DAYS, LF_RETRAIN_INTERVAL_DAYS, TRAINING_YEARS, get_training_days
 )
 
 logger = logging.getLogger(__name__)
@@ -137,10 +137,11 @@ class ForecastEngine:
         logger.info(f"Retraining {asset} ({'HF' if is_hf else 'LF'})")
         
         try:
-            # Fetch 1 year of training data
+            # Fetch training data (asset-specific: 1 year for crypto, 6 months for equities)
             end_time = datetime.now(timezone.utc)
+            training_days = get_training_days(asset)
             data = self.benchmarks_fetcher.fetch_training_data(
-                asset, resolution=1, end_time=end_time
+                asset, resolution=1, end_time=end_time, training_days=training_days
             )
             
             if data is None:
