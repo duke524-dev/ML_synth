@@ -251,10 +251,40 @@ def run_daily_baseline_crps_for_prompt(
                 all_prompt_results.append(rec)
                 continue
 
-            # 2) Extract real prices for CRPS from the same 1-minute cache
+            # 2) Extract real prices for CRPS (may span multiple days for 24h predictions)
             points_needed = prompt_cfg.time_length // dt_1m + 1
-            segment_1m = series_1m[offset_minutes : offset_minutes + points_needed]
-
+            
+            # Check if prediction spans into next day
+            end_minutes = offset_minutes + points_needed
+            if end_minutes <= len(series_1m):
+                # All data fits in current day
+                segment_1m = series_1m[offset_minutes : end_minutes]
+            else:
+                # Prediction spans into next day - need to load next day's data
+                # Get remaining points from current day
+                remaining_from_current = len(series_1m) - offset_minutes
+                segment_1m = list(series_1m[offset_minutes:])
+                
+                # Calculate how many points needed from next day
+                points_from_next_day = points_needed - remaining_from_current
+                
+                # Load next day's data
+                next_day = prompt_start.date() + timedelta(days=1)
+                next_day_key = next_day.isoformat()
+                next_cache_key = (asset, next_day_key)
+                
+                if next_cache_key not in price_cache:
+                    rec = dict(request_info)
+                    rec["error"] = f"prefetch_range_too_short: need next day {next_day_key} data"
+                    all_prompt_results.append(rec)
+                    continue
+                
+                next_day_data = price_cache[next_cache_key]
+                next_series_1m = next_day_data["prices"]
+                
+                # Append next day's data
+                segment_1m.extend(next_series_1m[:points_from_next_day])
+            
             if len(segment_1m) < points_needed:
                 rec = dict(request_info)
                 rec["error"] = "prefetch_range_too_short"
@@ -493,11 +523,15 @@ def main() -> int:
     all_prompt_results: List[PromptResult] = []
 
     # Prefetch 1-minute prices for all assets and days in the range
+    # Note: We fetch num_days + 1 because 24h predictions may span into the next day
+    prefetch_days = num_days + 1
+    prefetch_end_dt = start_dt + timedelta(days=prefetch_days - 1)
     print(
         f"[PREFETCH] Building 1m price cache for days "
-        f"{start_dt.date().isoformat()} to {end_dt.date().isoformat()}..."
+        f"{start_dt.date().isoformat()} to {prefetch_end_dt.date().isoformat()} "
+        f"(+1 day for cross-day predictions)..."
     )
-    price_cache = build_price_cache(start_dt, num_days)
+    price_cache = build_price_cache(start_dt, prefetch_days)
 
     prompt_cfgs = [
         ("LOW_FREQUENCY", prompt_config.LOW_FREQUENCY),

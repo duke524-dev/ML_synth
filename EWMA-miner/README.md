@@ -133,7 +133,7 @@ The test runner automatically patches `synth.miner.simulations` to use the EWMA 
 Key parameters in `config.py`:
 
 - **Half-lives**: `HALF_LIFE_1M` and `HALF_LIFE_5M` - EWMA decay rates
-- **Student-t nu**: `NU` - Degrees of freedom per asset
+- **Student-t nu**: `NU_1M` and `NU_5M` - Degrees of freedom per asset for high/low frequency prompts
 - **Warmup periods**: `WARMUP_1M_HOURS` (72h) and `WARMUP_5M_DAYS` (5 days)
 - **Equity off-hours multiplier**: `EQUITY_OFF_HOURS_MULT` (0.6)
 

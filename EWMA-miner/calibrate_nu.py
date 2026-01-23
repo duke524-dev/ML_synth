@@ -7,10 +7,8 @@ but patches `synth.miner.simulations.generate_simulations` to use the EWMA miner
 
 Notes
 -----
-- In EWMA-miner, Student-t degrees of freedom is controlled by `NU[asset]` in `config.py`.
-- Unlike half-life, `nu` is a single parameter per asset (not separate for HF/LF).
-- However, we test separately for HIGH_FREQUENCY and LOW_FREQUENCY prompts to see if
-  different `nu` values optimize differently for different time scales.
+- In EWMA-miner, Student-t degrees of freedom is controlled by `NU_1M[asset]` and `NU_5M[asset]` in `config.py`.
+- Separate `nu` values for HIGH_FREQUENCY (1-minute, dt=60s) and LOW_FREQUENCY (5-minute, dt=300s) prompts.
 - `nu` must be > 2 for Student-t variance to exist.
 """
 
@@ -166,7 +164,12 @@ def main() -> int:
 
     def eval_trial(asset: str, nu: float, prompt_kind: str) -> tuple[float, int]:
         # Apply candidate by mutating the shared dict in-place
-        ewma_config.NU[asset] = nu
+        if prompt_kind == "high":
+            ewma_config.NU_1M[asset] = nu
+        elif prompt_kind == "low":
+            ewma_config.NU_5M[asset] = nu
+        else:
+            raise ValueError(prompt_kind)
 
         # Use isolated persisted state per (asset, prompt_kind, candidate)
         # Format nu with 1 decimal place for directory name
@@ -248,7 +251,7 @@ def main() -> int:
             if best is not None:
                 results_summary["best_high"][asset] = best
                 print(
-                    f"[high] BEST asset={asset} -> NU['{asset}'] = {best['nu']:.1f}  "
+                    f"[high] BEST asset={asset} -> NU_1M['{asset}'] = {best['nu']:.1f}  "
                     f"(avg_crps={best['avg']:.6f}, n={best['n']})"
                 )
 
@@ -270,7 +273,7 @@ def main() -> int:
             if best is not None:
                 results_summary["best_low"][asset] = best
                 print(
-                    f"[low ] BEST asset={asset} -> NU['{asset}'] = {best['nu']:.1f}  "
+                    f"[low ] BEST asset={asset} -> NU_5M['{asset}'] = {best['nu']:.1f}  "
                     f"(avg_crps={best['avg']:.6f}, n={best['n']})"
                 )
 
@@ -321,58 +324,21 @@ def main() -> int:
         f.write("=" * 80 + "\n\n")
         
         f.write("# Student-t degrees of freedom (nu)\n")
-        f.write("# Note: If testing both high and low, you may want to use the average\n")
-        f.write("# or choose based on which prompt type is more important for your use case.\n")
-        f.write("NU = {\n")
+        f.write("# Separate values for 1-minute (high frequency) and 5-minute (low frequency) prompts\n\n")
         
-        # If both prompt types were tested, show both and let user decide
-        if results_summary["best_high"] and results_summary["best_low"]:
-            # Show high frequency results
-            f.write("    # HIGH_FREQUENCY optimized values:\n")
-            for asset in sorted(results_summary["best_high"].keys()):
-                best = results_summary["best_high"][asset]
-                f.write(f"    # '{asset}': {best['nu']:.1f},  # high: avg_crps={best['avg']:.6f}\n")
-            
-            f.write("\n    # LOW_FREQUENCY optimized values:\n")
-            for asset in sorted(results_summary["best_low"].keys()):
-                best = results_summary["best_low"][asset]
-                f.write(f"    # '{asset}': {best['nu']:.1f},  # low: avg_crps={best['avg']:.6f}\n")
-            
-            f.write("\n    # Recommended: Use average or pick based on primary use case\n")
-            # Compute average for assets that appear in both
-            common_assets = set(results_summary["best_high"].keys()) & set(results_summary["best_low"].keys())
-            for asset in sorted(common_assets):
-                nu_high = results_summary["best_high"][asset]["nu"]
-                nu_low = results_summary["best_low"][asset]["nu"]
-                nu_avg = (nu_high + nu_low) / 2.0
-                crps_high = results_summary["best_high"][asset]["avg"]
-                crps_low = results_summary["best_low"][asset]["avg"]
-                f.write(f"    \"{asset}\": {nu_avg:.1f},  # avg of high={nu_high:.1f} (crps={crps_high:.6f}) "
-                       f"and low={nu_low:.1f} (crps={crps_low:.6f})\n")
-            
-            # Assets only in one category
-            only_high = set(results_summary["best_high"].keys()) - set(results_summary["best_low"].keys())
-            only_low = set(results_summary["best_low"].keys()) - set(results_summary["best_high"].keys())
-            
-            for asset in sorted(only_high):
-                best = results_summary["best_high"][asset]
-                f.write(f"    \"{asset}\": {best['nu']:.1f},  # high only: avg_crps={best['avg']:.6f}\n")
-            
-            for asset in sorted(only_low):
-                best = results_summary["best_low"][asset]
-                f.write(f"    \"{asset}\": {best['nu']:.1f},  # low only: avg_crps={best['avg']:.6f}\n")
-        elif results_summary["best_high"]:
-            # Only high frequency
+        if results_summary["best_high"]:
+            f.write("NU_1M = {\n")
             for asset in sorted(results_summary["best_high"].keys()):
                 best = results_summary["best_high"][asset]
                 f.write(f"    \"{asset}\": {best['nu']:.1f},  # avg_crps={best['avg']:.6f}\n")
-        elif results_summary["best_low"]:
-            # Only low frequency
+            f.write("}\n\n")
+        
+        if results_summary["best_low"]:
+            f.write("NU_5M = {\n")
             for asset in sorted(results_summary["best_low"].keys()):
                 best = results_summary["best_low"][asset]
                 f.write(f"    \"{asset}\": {best['nu']:.1f},  # avg_crps={best['avg']:.6f}\n")
-        
-        f.write("}\n")
+            f.write("}\n")
         
         f.write("\n" + "=" * 80 + "\n")
         f.write(f"Results saved to: {results_file}\n")
