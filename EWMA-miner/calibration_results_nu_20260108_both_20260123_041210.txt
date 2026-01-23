@@ -1,0 +1,60 @@
+================================================================================
+EWMA STUDENT-T NU CALIBRATION RESULTS
+================================================================================
+
+Calibration Date: 2026-01-23T04:12:10.980312Z
+Test Period: 2026-01-08 (7 day(s))
+Prompt Type: both
+Grid (nu): 2.5, 3.0, 3.5, 4.0, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0
+Assets: BTC, ETH, SOL, XAU
+
+================================================================================
+
+BEST NU VALUES
+--------------------------------------------------------------------------------
+
+NU (for HIGH_FREQUENCY prompts, dt=60s):
+--------------------------------------------------------------------------------
+  'BTC': 9.5,  # avg_crps=717.552117, n=812
+  'ETH': 7.0,  # avg_crps=932.977186, n=812
+  'SOL': 8.0,  # avg_crps=1226.943205, n=812
+  'XAU': 9.5,  # avg_crps=339.815651, n=812
+
+NU (for LOW_FREQUENCY prompts, dt=300s):
+--------------------------------------------------------------------------------
+  'BTC': 6.5,  # avg_crps=2677.208480, n=7
+  'ETH': 8.5,  # avg_crps=3410.764007, n=7
+  'SOL': 4.0,  # avg_crps=4423.264927, n=7
+  'XAU': 3.0,  # avg_crps=1348.498700, n=7
+
+
+================================================================================
+CONFIG.PY READY FORMAT (copy/paste into EWMA-miner/config.py)
+================================================================================
+
+# Student-t degrees of freedom (nu)
+# Note: If testing both high and low, you may want to use the average
+# or choose based on which prompt type is more important for your use case.
+NU = {
+    # HIGH_FREQUENCY optimized values:
+    # 'BTC': 9.5,  # high: avg_crps=717.552117
+    # 'ETH': 7.0,  # high: avg_crps=932.977186
+    # 'SOL': 8.0,  # high: avg_crps=1226.943205
+    # 'XAU': 9.5,  # high: avg_crps=339.815651
+
+    # LOW_FREQUENCY optimized values:
+    # 'BTC': 6.5,  # low: avg_crps=2677.208480
+    # 'ETH': 8.5,  # low: avg_crps=3410.764007
+    # 'SOL': 4.0,  # low: avg_crps=4423.264927
+    # 'XAU': 3.0,  # low: avg_crps=1348.498700
+
+    # Recommended: Use average or pick based on primary use case
+    "BTC": 8.0,  # avg of high=9.5 (crps=717.552117) and low=6.5 (crps=2677.208480)
+    "ETH": 7.8,  # avg of high=7.0 (crps=932.977186) and low=8.5 (crps=3410.764007)
+    "SOL": 6.0,  # avg of high=8.0 (crps=1226.943205) and low=4.0 (crps=4423.264927)
+    "XAU": 6.2,  # avg of high=9.5 (crps=339.815651) and low=3.0 (crps=1348.498700)
+}
+
+================================================================================
+Results saved to: /root/sn50/ML_synth/EWMA-miner/calibration_results_nu_20260108_both_20260123_041210.txt
+================================================================================
