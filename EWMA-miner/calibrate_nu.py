@@ -301,6 +301,13 @@ def main() -> int:
     assets = list(_iter_assets(args.assets))
     print(f"[calibrate] assets_resolved n_assets={len(assets)} assets={assets}", flush=True)
 
+    # Calculate total number of trials for progress tracking
+    num_prompt_types = 2 if args.prompt_type == "both" else 1
+    total_trials = len(assets) * num_prompt_types * len(grid_nu)
+    current_trial = 0
+    
+    print(f"[calibrate] Total trials to run: {total_trials} (={len(assets)} assets × {num_prompt_types} prompt_types × {len(grid_nu)} candidates)", flush=True)
+
     # Collect results for file output
     results_summary = {
         "start_day": args.start_day,
@@ -318,9 +325,12 @@ def main() -> int:
         if args.prompt_type in ("high", "both"):
             best = None
             for nu_idx, nu in enumerate(grid_nu, start=1):
+                current_trial += 1
+                progress_pct = (current_trial / total_trials) * 100
                 print(
-                    f"[calibrate] progress asset={asset} kind=high "
-                    f"candidate={nu_idx}/{len(grid_nu)} nu={nu:.2f}",
+                    f"[calibrate] progress [{progress_pct:5.1f}%] asset={asset} kind=high "
+                    f"candidate={nu_idx}/{len(grid_nu)} nu={nu:.2f} "
+                    f"({current_trial}/{total_trials} trials)",
                     flush=True,
                 )
                 total, n = eval_trial(asset, nu, "high")
@@ -340,9 +350,12 @@ def main() -> int:
         if args.prompt_type in ("low", "both"):
             best = None
             for nu_idx, nu in enumerate(grid_nu, start=1):
+                current_trial += 1
+                progress_pct = (current_trial / total_trials) * 100
                 print(
-                    f"[calibrate] progress asset={asset} kind=low  "
-                    f"candidate={nu_idx}/{len(grid_nu)} nu={nu:.2f}",
+                    f"[calibrate] progress [{progress_pct:5.1f}%] asset={asset} kind=low  "
+                    f"candidate={nu_idx}/{len(grid_nu)} nu={nu:.2f} "
+                    f"({current_trial}/{total_trials} trials)",
                     flush=True,
                 )
                 total, n = eval_trial(asset, nu, "low")

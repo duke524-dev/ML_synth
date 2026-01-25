@@ -303,6 +303,13 @@ def main() -> int:
     assets = list(_iter_assets(args.assets))
     print(f"[calibrate] assets_resolved n_assets={len(assets)} assets={assets}", flush=True)
 
+    # Calculate total number of trials for progress tracking
+    num_prompt_types = 2 if args.prompt_type == "both" else 1
+    total_trials = len(assets) * num_prompt_types * len(grid_minutes)
+    current_trial = 0
+    
+    print(f"[calibrate] Total trials to run: {total_trials} (={len(assets)} assets × {num_prompt_types} prompt_types × {len(grid_minutes)} candidates)", flush=True)
+
     # Collect results for file output
     results_summary = {
         "start_day": args.start_day,
@@ -319,9 +326,12 @@ def main() -> int:
         if args.prompt_type in ("high", "both"):
             best = None
             for m_idx, m in enumerate(grid_minutes, start=1):
+                current_trial += 1
+                progress_pct = (current_trial / total_trials) * 100
                 print(
-                    f"[calibrate] progress asset={asset} kind=high "
-                    f"candidate={m_idx}/{len(grid_minutes)} half_life_min={m}",
+                    f"[calibrate] progress [{progress_pct:5.1f}%] asset={asset} kind=high "
+                    f"candidate={m_idx}/{len(grid_minutes)} half_life_min={m} "
+                    f"({current_trial}/{total_trials} trials)",
                     flush=True,
                 )
                 hl = m * 60
@@ -342,9 +352,12 @@ def main() -> int:
         if args.prompt_type in ("low", "both"):
             best = None
             for m_idx, m in enumerate(grid_minutes, start=1):
+                current_trial += 1
+                progress_pct = (current_trial / total_trials) * 100
                 print(
-                    f"[calibrate] progress asset={asset} kind=low  "
-                    f"candidate={m_idx}/{len(grid_minutes)} half_life_min={m}",
+                    f"[calibrate] progress [{progress_pct:5.1f}%] asset={asset} kind=low  "
+                    f"candidate={m_idx}/{len(grid_minutes)} half_life_min={m} "
+                    f"({current_trial}/{total_trials} trials)",
                     flush=True,
                 )
                 hl = m * 60
