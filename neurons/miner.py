@@ -25,7 +25,7 @@ import bittensor as bt
 # import base miner class which takes care of most of the boilerplate
 from synth.base.miner import BaseMinerNeuron
 from synth.miner.simulations import generate_simulations
-from synth.protocol import Simulation
+from synth.protocol import Simulation, Challenge
 
 
 class Miner(BaseMinerNeuron):
@@ -39,6 +39,14 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
+        # Register Challenge synapse separately to handle /Challenge endpoint
+        # The base class already registered Simulation, now we register Challenge
+        bt.logging.info("Attaching Challenge handler to miner axon.")
+        self.axon.attach(
+            forward_fn=self.forward_challenge,
+            blacklist_fn=self.blacklist_challenge,
+            priority_fn=self.priority_challenge,
+        )
 
     async def forward_miner(self, synapse: Simulation) -> Simulation:
         simulation_input = synapse.simulation_input
@@ -56,7 +64,19 @@ class Miner(BaseMinerNeuron):
 
         return synapse
 
-    async def blacklist(self, synapse: Union[Simulation, Challenge]) -> typing.Tuple[bool, str]:
+    async def forward_challenge(self, synapse: Challenge) -> Challenge:
+        """Handler for Challenge synapse - delegates to forward_miner since Challenge inherits from Simulation."""
+        return await self.forward_miner(synapse)
+
+    async def blacklist_challenge(self, synapse: Challenge) -> typing.Tuple[bool, str]:
+        """Blacklist handler for Challenge synapse - delegates to blacklist since Challenge inherits from Simulation."""
+        return await self.blacklist(synapse)
+
+    async def priority_challenge(self, synapse: Challenge) -> float:
+        """Priority handler for Challenge synapse - delegates to priority since Challenge inherits from Simulation."""
+        return await self.priority(synapse)
+
+    async def blacklist(self, synapse: Simulation) -> typing.Tuple[bool, str]:
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
         define the logic for blacklisting requests based on your needs and desired security parameters.
@@ -126,7 +146,7 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
-    async def priority(self, synapse: Union[Simulation, Challenge]) -> float:
+    async def priority(self, synapse: Simulation) -> float:
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.
