@@ -19,6 +19,7 @@
 
 import time
 import typing
+from typing import Union
 import bittensor as bt
 
 # import base miner class which takes care of most of the boilerplate
@@ -55,7 +56,7 @@ class Miner(BaseMinerNeuron):
 
         return synapse
 
-    async def blacklist(self, synapse: Simulation | Challenge) -> typing.Tuple[bool, str]:
+    async def blacklist(self, synapse: Union[Simulation, Challenge]) -> typing.Tuple[bool, str]:
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
         define the logic for blacklisting requests based on your needs and desired security parameters.
@@ -125,7 +126,7 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
-    async def priority(self, synapse: Simulation | Challenge) -> float:
+    async def priority(self, synapse: Union[Simulation, Challenge]) -> float:
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.
