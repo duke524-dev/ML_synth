@@ -2,7 +2,7 @@
 EWMA HALF-LIFE CALIBRATION RESULTS
 ================================================================================
 
-Calibration Date: 2026-01-23T10:47:22.926486Z
+Calibration Date: 2026-01-25T15:12:32.812365Z
 Test Period: 2026-01-08 (7 day(s))
 Prompt Type: high
 Grid (minutes): 15, 30, 60, 120, 240
@@ -15,10 +15,10 @@ BEST HALF-LIFE VALUES (in seconds)
 
 HALF_LIFE_1M (for HIGH_FREQUENCY prompts, dt=60s):
 --------------------------------------------------------------------------------
-  'BTC': 900,  # avg_crps=712.907593, n=836
-  'ETH': 900,  # avg_crps=926.863937, n=836
-  'SOL': 1800,  # avg_crps=1225.116436, n=836
-  'XAU': 900,  # avg_crps=341.419342, n=836
+  'BTC': 1800,  # avg_crps=706.220022, n=840
+  'ETH': 1800,  # avg_crps=921.922903, n=840
+  'SOL': 1800,  # avg_crps=1218.048847, n=840
+  'XAU': 3600,  # avg_crps=338.006823, n=840
 
 
 ================================================================================
@@ -27,13 +27,14 @@ CONFIG.PY READY FORMAT (copy/paste into EWMA-miner/config.py)
 
 # EWMA half-lives (in seconds, converted to lambda per dt)
 HALF_LIFE_1M = {
-    "BTC": 900,  # 15 minutes, lambda=0.954842, avg_crps=712.907593
-    "ETH": 900,  # 15 minutes, lambda=0.954842, avg_crps=926.863937
-    "SOL": 1800,  # 30 minutes, lambda=0.977160, avg_crps=1225.116436
-    "XAU": 900,  # 15 minutes, lambda=0.954842, avg_crps=341.419342
+    "BTC": 1800,  # 30 minutes, lambda=0.977160, avg_crps=706.220022
+    "ETH": 1800,  # 30 minutes, lambda=0.977160, avg_crps=921.922903
+    "SOL": 1800,  # 30 minutes, lambda=0.977160, avg_crps=1218.048847
+    "XAU": 3600,  # 60 minutes, lambda=0.988514, avg_crps=338.006823
 }
 
 
 ================================================================================
-Results saved to: /root/sn50/ML_synth/EWMA-miner/calibration_results_20260108_high_20260123_104722.txt
+Results saved to: /root/sn50/ML_synth/EWMA-miner/calibration_results_20260108_high_20260125_151232.txt
 ================================================================================
+
