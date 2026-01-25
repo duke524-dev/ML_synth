@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from collections import defaultdict
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple
 from unittest.mock import patch
@@ -507,6 +508,19 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Number of days to test from start-day (e.g. 1, 3, 7)",
     )
+    parser.add_argument(
+        "--assets",
+        type=str,
+        default=None,
+        help="Comma-separated list of assets to test (e.g. 'BTC,ETH'). If not specified, tests all assets from prompt config.",
+    )
+    parser.add_argument(
+        "--prompt-type",
+        type=str,
+        choices=["low", "high", "both"],
+        default="both",
+        help="Which prompt type(s) to test: 'low' (LOW_FREQUENCY), 'high' (HIGH_FREQUENCY), or 'both' (default).",
+    )
     return parser.parse_args()
 
 
@@ -522,25 +536,69 @@ def main() -> int:
 
     all_prompt_results: List[PromptResult] = []
 
+    # Parse asset filter if provided
+    asset_filter = None
+    if args.assets:
+        asset_filter = [a.strip().upper() for a in args.assets.split(",") if a.strip()]
+        print(f"[FILTER] Testing only assets: {', '.join(asset_filter)}")
+
     # Prefetch 1-minute prices for all assets and days in the range
-    # Note: We fetch num_days + 2 total:
-    #   - 1 day BEFORE start for state warm-up (volatility initialization)
-    #   - num_days for actual testing
-    #   - 1 day AFTER end for cross-day predictions (24h predictions spanning midnight)
-    prefetch_start_dt = start_dt - timedelta(days=1)  # Start one day earlier for warm-up
-    prefetch_days = num_days + 2  # 1 before + num_days + 1 after
+    # Calculate warm-up period (same as real miner: 72h for crypto, 5 days for equity)
+    try:
+        import sys
+        import os
+        ewma_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "EWMA-miner")
+        if ewma_dir not in sys.path:
+            sys.path.insert(0, ewma_dir)
+        import config as ewma_config
+        max_warmup_days = max(ewma_config.WARMUP_1M_HOURS // 24, ewma_config.WARMUP_5M_DAYS)
+    except ImportError:
+        # Fallback to 1 day if EWMA config not available
+        max_warmup_days = 1
+    
+    # Fetch: warmup days + num_days + 1 day after (for cross-day predictions)
+    prefetch_days = max_warmup_days + num_days + 1
+    prefetch_start_dt = start_dt - timedelta(days=max_warmup_days)
     prefetch_end_dt = prefetch_start_dt + timedelta(days=prefetch_days - 1)
     print(
         f"[PREFETCH] Building 1m price cache for days "
         f"{prefetch_start_dt.date().isoformat()} to {prefetch_end_dt.date().isoformat()} "
-        f"(+1 day before for warm-up, +1 day after for cross-day predictions)..."
+        f"({max_warmup_days} warmup days + {num_days} test days + 1 day after for cross-day predictions)..."
     )
     price_cache = build_price_cache(prefetch_start_dt, prefetch_days)
 
-    prompt_cfgs = [
-        ("LOW_FREQUENCY", prompt_config.LOW_FREQUENCY),
-        ("HIGH_FREQUENCY", prompt_config.HIGH_FREQUENCY),
-    ]
+    # Filter prompt configs by asset if specified
+    low_freq_cfg = prompt_config.LOW_FREQUENCY
+    high_freq_cfg = prompt_config.HIGH_FREQUENCY
+    
+    if asset_filter:
+        # Filter asset lists to only include specified assets
+        low_assets_filtered = [a for a in low_freq_cfg.asset_list if a in asset_filter]
+        high_assets_filtered = [a for a in high_freq_cfg.asset_list if a in asset_filter]
+        
+        if not low_assets_filtered and not high_assets_filtered:
+            print(f"[ERROR] No assets from filter {asset_filter} found in prompt configs!")
+            return 1
+        
+        low_freq_cfg = replace(low_freq_cfg, asset_list=low_assets_filtered)
+        high_freq_cfg = replace(high_freq_cfg, asset_list=high_assets_filtered)
+        
+        print(f"[FILTER] LOW_FREQUENCY assets: {low_assets_filtered}")
+        print(f"[FILTER] HIGH_FREQUENCY assets: {high_assets_filtered}")
+
+    # Filter prompt configs by prompt type if specified
+    prompt_cfgs = []
+    if args.prompt_type in ("low", "both"):
+        prompt_cfgs.append(("LOW_FREQUENCY", low_freq_cfg))
+    if args.prompt_type in ("high", "both"):
+        prompt_cfgs.append(("HIGH_FREQUENCY", high_freq_cfg))
+    
+    if not prompt_cfgs:
+        print(f"[ERROR] No prompt types selected!")
+        return 1
+    
+    if args.prompt_type != "both":
+        print(f"[FILTER] Testing only prompt type: {args.prompt_type.upper()}_FREQUENCY")
 
     # Get state update function if available (for EWMA miner warm-up)
     update_states_fn = None
@@ -548,9 +606,9 @@ def main() -> int:
         mod = sys.modules["test_wrapper"]
         update_states_fn = getattr(mod, "update_states_from_price_data", None)
 
-    # Get all assets for warm-up
-    low_assets = set(prompt_config.LOW_FREQUENCY.asset_list)
-    high_assets = set(prompt_config.HIGH_FREQUENCY.asset_list)
+    # Get all assets for warm-up (use filtered configs if asset filter was applied)
+    low_assets = set(low_freq_cfg.asset_list)
+    high_assets = set(high_freq_cfg.asset_list)
     all_assets = sorted(low_assets | high_assets)
 
     for day_offset in range(num_days):
@@ -560,27 +618,78 @@ def main() -> int:
         
         print(f"Running baseline offline CRPS test for day {day_dt.date().isoformat()}...")
 
-        # Warm up state using previous day's data (before any prompts on this day)
+        # Warm up state using historical data (same as real miner's warmup_states)
+        # Use proper warm-up period: 72 hours for crypto, 5 days for equity
         if update_states_fn is not None:
-            print(f"  [WARM-UP] Initializing volatility state from {prev_day_key} data...")
-            for asset in all_assets:
-                cache_key = (asset, prev_day_key)
-                if cache_key in price_cache:
-                    prev_day_data = price_cache[cache_key]
-                    prev_base_start = datetime.fromisoformat(prev_day_data["start_time_iso"])
-                    prev_series = prev_day_data["prices"]
-                    # Update state through entire previous day (target_time = end of previous day = start of current day)
-                    try:
-                        update_states_fn(
-                            asset=asset,
-                            prices=prev_series,
-                            base_start=prev_base_start,
-                            target_time=day_dt,  # End of previous day = start of current day
-                        )
-                    except Exception as e:
-                        print(f"    Warning: Failed to warm up state for {asset}: {e}")
-                else:
-                    print(f"    Warning: No data for {asset} on {prev_day_key} for warm-up")
+            # Import config to get warm-up periods
+            try:
+                import sys
+                import os
+                ewma_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "EWMA-miner")
+                if ewma_dir not in sys.path:
+                    sys.path.insert(0, ewma_dir)
+                import config as ewma_config
+                
+                print(f"  [WARM-UP] Initializing volatility state with historical data...")
+                for asset in all_assets:
+                    # Determine warm-up period based on asset type (same as real miner)
+                    if asset in ewma_config.HF_ASSETS or asset in ewma_config.LF_CRYPTO_ASSETS:
+                        warmup_hours = ewma_config.WARMUP_1M_HOURS  # 72 hours (3 days) for crypto
+                    else:
+                        warmup_hours = ewma_config.WARMUP_5M_DAYS * 24  # 5 days (120 hours) for equity
+                    
+                    # Calculate warm-up start time
+                    warmup_start_dt = day_dt - timedelta(hours=warmup_hours)
+                    
+                    # Collect all warm-up days
+                    warmup_day_list = []
+                    current_warmup_dt = warmup_start_dt
+                    while current_warmup_dt < day_dt:
+                        warmup_day_key = current_warmup_dt.date().isoformat()
+                        cache_key = (asset, warmup_day_key)
+                        if cache_key in price_cache:
+                            warmup_day_list.append((current_warmup_dt, price_cache[cache_key]))
+                        current_warmup_dt += timedelta(days=1)
+                    
+                    # Process warm-up data in chronological order (same as real miner)
+                    if warmup_day_list:
+                        print(f"    Warming up {asset} with {warmup_hours}h ({len(warmup_day_list)} days) of historical data...")
+                        for warmup_dt, warmup_data in warmup_day_list:
+                            warmup_base_start = datetime.fromisoformat(warmup_data["start_time_iso"])
+                            warmup_series = warmup_data["prices"]
+                            try:
+                                # Update state up to end of this warm-up day
+                                warmup_day_end = warmup_dt + timedelta(days=1)
+                                update_states_fn(
+                                    asset=asset,
+                                    prices=warmup_series,
+                                    base_start=warmup_base_start,
+                                    target_time=min(warmup_day_end, day_dt),  # Don't exceed test day start
+                                )
+                            except Exception as e:
+                                print(f"      Warning: Failed to warm up {asset} for {warmup_dt.date()}: {e}")
+                    else:
+                        print(f"    Warning: No warm-up data for {asset} (need {warmup_hours}h before {day_dt.date()})")
+            except ImportError:
+                # Fallback to simple 1-day warm-up if EWMA config not available
+                print(f"  [WARM-UP] Initializing volatility state from {prev_day_key} data (fallback: 1 day)...")
+                for asset in all_assets:
+                    cache_key = (asset, prev_day_key)
+                    if cache_key in price_cache:
+                        prev_day_data = price_cache[cache_key]
+                        prev_base_start = datetime.fromisoformat(prev_day_data["start_time_iso"])
+                        prev_series = prev_day_data["prices"]
+                        try:
+                            update_states_fn(
+                                asset=asset,
+                                prices=prev_series,
+                                base_start=prev_base_start,
+                                target_time=day_dt,
+                            )
+                        except Exception as e:
+                            print(f"    Warning: Failed to warm up state for {asset}: {e}")
+                    else:
+                        print(f"    Warning: No data for {asset} on {prev_day_key} for warm-up")
 
         for label, cfg in prompt_cfgs:
             print(f"  Prompt type: {label}")

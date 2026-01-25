@@ -61,13 +61,86 @@ def _run_for_asset(
 ) -> tuple[float, int]:
     # Import locally so the patching in main() is already active
     from offline_CRPS_test.offline_crps_simple import run_daily_baseline_crps_for_prompt
+    from datetime import datetime, timezone
+    import sys
 
     # Keep everything identical to validator config but restrict to one asset
     cfg_one = replace(prompt_cfg, asset_list=[asset])
 
+    # Get state update function for warm-up (same as main() does)
+    update_states_fn = None
+    if "test_wrapper" in sys.modules:
+        mod = sys.modules["test_wrapper"]
+        update_states_fn = getattr(mod, "update_states_from_price_data", None)
+
+    # Determine warm-up period based on asset type (same as real miner)
+    import config as ewma_config
+    
+    # Check if asset is crypto (uses 72h warmup) or equity (uses 5 days warmup)
+    if asset in ewma_config.HF_ASSETS or asset in ewma_config.LF_CRYPTO_ASSETS:
+        warmup_hours = ewma_config.WARMUP_1M_HOURS  # 72 hours (3 days) for crypto
+    else:
+        warmup_hours = ewma_config.WARMUP_5M_DAYS * 24  # 5 days (120 hours) for equity
+
     all_prompt_results: list[dict] = []
     for day_offset in range(num_days):
         day_dt = start_dt + timedelta(days=day_offset)
+        
+        # Warm up state using historical data (same as real miner's warmup_states)
+        # Use warmup_hours of historical data, not just one day
+        if update_states_fn is not None and day_offset == 0:
+            # Only warm up once at the start (for first day)
+            # Calculate warm-up start time
+            warmup_start_dt = day_dt - timedelta(hours=warmup_hours)
+            
+            # Collect all warm-up days
+            warmup_day_list = []
+            current_warmup_dt = warmup_start_dt
+            while current_warmup_dt < day_dt:
+                warmup_day_key = current_warmup_dt.date().isoformat()
+                cache_key = (asset, warmup_day_key)
+                if cache_key in price_cache:
+                    warmup_day_list.append((current_warmup_dt, price_cache[cache_key]))
+                current_warmup_dt += timedelta(days=1)
+            
+            # Process warm-up data in chronological order (same as real miner)
+            if warmup_day_list:
+                print(f"[calibrate] Warming up {asset} with {warmup_hours}h ({len(warmup_day_list)} days) of historical data...")
+                for warmup_dt, warmup_data in warmup_day_list:
+                    warmup_base_start = datetime.fromisoformat(warmup_data["start_time_iso"])
+                    warmup_series = warmup_data["prices"]
+                    try:
+                        # Update state up to end of this warm-up day
+                        warmup_day_end = warmup_dt + timedelta(days=1)
+                        update_states_fn(
+                            asset=asset,
+                            prices=warmup_series,
+                            base_start=warmup_base_start,
+                            target_time=min(warmup_day_end, day_dt),  # Don't exceed test day start
+                        )
+                    except Exception as e:
+                        # Silently continue if warm-up fails
+                        pass
+        
+        # For subsequent days, warm up with previous day (incremental)
+        if update_states_fn is not None and day_offset > 0:
+            prev_day_dt = day_dt - timedelta(days=1)
+            prev_day_key = prev_day_dt.date().isoformat()
+            cache_key = (asset, prev_day_key)
+            if cache_key in price_cache:
+                prev_day_data = price_cache[cache_key]
+                prev_base_start = datetime.fromisoformat(prev_day_data["start_time_iso"])
+                prev_series = prev_day_data["prices"]
+                try:
+                    update_states_fn(
+                        asset=asset,
+                        prices=prev_series,
+                        base_start=prev_base_start,
+                        target_time=day_dt,  # End of previous day = start of current day
+                    )
+                except Exception as e:
+                    pass
+        
         run_daily_baseline_crps_for_prompt(
             prompt_cfg=cfg_one,
             prompt_label=prompt_label,
@@ -159,7 +232,16 @@ def main() -> int:
     os.makedirs(args.state_root, exist_ok=True)
 
     start_dt = datetime.fromisoformat(args.start_day).replace(tzinfo=timezone.utc)
-    price_cache = build_price_cache(start_dt, args.num_days)
+    
+    # Calculate how many days of warm-up data we need (max across all assets)
+    import config as ewma_config
+    max_warmup_days = max(ewma_config.WARMUP_1M_HOURS // 24, ewma_config.WARMUP_5M_DAYS)
+    # Fetch: warmup days + num_days + 1 day after (for cross-day predictions)
+    prefetch_days = max_warmup_days + args.num_days + 1
+    prefetch_start_dt = start_dt - timedelta(days=max_warmup_days)
+    
+    print(f"[calibrate] Fetching price cache: {max_warmup_days} warmup days + {args.num_days} test days + 1 day after")
+    price_cache = build_price_cache(prefetch_start_dt, prefetch_days)
 
     def eval_trial(asset: str, half_life_seconds: int, prompt_kind: str) -> tuple[float, int]:
         dt = 60 if prompt_kind == "high" else 300

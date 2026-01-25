@@ -88,10 +88,10 @@ HALF_LIFE_5M = {
 # Separate values for 1-minute (high frequency) and 5-minute (low frequency) prompts
 # Calibrated from calibration_results_nu_20260108_both_20260123_041210.txt
 NU_1M = {
-    "BTC": 10.0,  # avg_crps=711.923151
-    "ETH": 9.0,  # avg_crps=926.695336
-    "SOL": 7.0,  # avg_crps=1224.570144
-    "XAU": 6.0,  # avg_crps=341.078486
+    "BTC": 10.0,  # avg_crps=712.058582
+    "ETH": 7.5,  # avg_crps=926.735094
+    "SOL": 9.5,  # avg_crps=1224.588394
+    "XAU": 3.0,  # avg_crps=341.015981
     "SPYX": 10.0,  # Not calibrated, using default
     "NVDAX": 10.0,  # Not calibrated, using default
     "TSLAX": 10.0,  # Not calibrated, using default
@@ -100,10 +100,10 @@ NU_1M = {
 }
 
 NU_5M = {
-    "BTC": 9.0,  # avg_crps=2515.615899
-    "ETH": 10.0,  # avg_crps=3251.527849
-    "SOL": 5.0,  # avg_crps=4364.987904
-    "XAU": 5.5,  # avg_crps=1256.711113
+    "BTC": 10.0,  # avg_crps=2514.587355
+    "ETH": 9.0,  # avg_crps=3251.242340
+    "SOL": 3.5,  # avg_crps=4362.065741
+    "XAU": 3.5,  # avg_crps=1259.983802
     "SPYX": 10.0,  # Not calibrated, using default
     "NVDAX": 10.0,  # Not calibrated, using default
     "TSLAX": 10.0,  # Not calibrated, using default

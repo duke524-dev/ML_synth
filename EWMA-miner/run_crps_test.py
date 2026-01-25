@@ -5,6 +5,7 @@ Patches synth.miner.simulations to use EWMA miner instead of baseline
 """
 import sys
 import os
+import shutil
 
 # Add EWMA-miner to path
 ewma_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,7 +16,18 @@ project_root = os.path.dirname(ewma_dir)
 sys.path.insert(0, project_root)
 
 # Import EWMA test wrapper functions BEFORE importing anything that uses synth.miner.simulations
-from test_wrapper import generate_simulations, get_asset_price
+from test_wrapper import generate_simulations, get_asset_price, reset_forecast_engine
+
+# Reset state directory to ensure clean start
+# This prevents stale state from previous runs from affecting test results
+state_dir = os.path.join(ewma_dir, "state")
+if os.path.exists(state_dir):
+    print(f"[run_crps_test] Clearing state directory: {state_dir}")
+    shutil.rmtree(state_dir)
+os.makedirs(state_dir, exist_ok=True)
+
+# Reset the forecast engine to ensure fresh initialization
+reset_forecast_engine()
 
 # Patch synth.miner.simulations module BEFORE it gets imported by offline_crps_simple
 import synth.miner.simulations
