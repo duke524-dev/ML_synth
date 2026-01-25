@@ -4,7 +4,7 @@ import os
 
 
 def check_config(cls, config: "bt.Config"):
-    bt.axon.check_config(config)
+    bt.Axon.check_config(config)
     bt.logging.check_config(config)
     full_path = os.path.expanduser(
         "{}/{}/{}/{}".format(
@@ -94,7 +94,7 @@ def get_config() -> "bt.Config":
     bt.wallet.add_args(parser)
 
     # Adds axon specific arguments i.e. --axon.port ...
-    bt.axon.add_args(parser)
+    bt.Axon.add_args(parser)
 
     # Activating the parser to read any command-line inputs.
     # To print help message, run python3 template/miner.py --help

@@ -59,7 +59,7 @@ class StreamMiner(ABC):
             bt.logging.info(f"Running miner on uid: {self.my_subnet_uid}")
 
         # The axon handles request processing, allowing validators to send this process requests.
-        self.axon = axon or bt.axon(
+        self.axon = axon or bt.Axon(
             wallet=self.wallet, port=self.config.axon.port
         )
         # Attach determiners which functions are called when servicing a request.

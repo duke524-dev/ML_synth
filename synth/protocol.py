@@ -65,3 +65,11 @@ class Simulation(bt.Synapse):
         as the output of the dendrite.query() call.
         """
         return self.simulation_output
+
+
+class Challenge(Simulation):
+    """
+    Challenge synapse for backward compatibility.
+    This is an alias for Simulation to support validators using the old protocol.
+    """
+    pass

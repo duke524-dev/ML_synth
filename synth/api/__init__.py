@@ -50,7 +50,7 @@ class SubnetsAPI(ABC):
 
     async def query_api(
         self,
-        axons: Union[bt.axon, List[bt.axon]],
+        axons: Union[bt.Axon, List[bt.Axon]],
         deserialize: Optional[bool] = False,
         timeout: Optional[int] = 12,
         n: Optional[float] = 0.1,
@@ -61,7 +61,7 @@ class SubnetsAPI(ABC):
         Queries the API nodes of a subnet using the given synapse and bespoke query function.
 
         Args:
-            axons (Union[bt.axon, List[bt.axon]]): The list of axon(s) to query.
+            axons (Union[bt.Axon, List[bt.Axon]]): The list of axon(s) to query.
             deserialize (bool, optional): Whether to deserialize the responses. Defaults to False.
             timeout (int, optional): The timeout in seconds for the query. Defaults to 12.
             n (float, optional): The fraction of top nodes to consider based on stake. Defaults to 0.1.
