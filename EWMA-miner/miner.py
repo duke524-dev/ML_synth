@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from synth.base.miner import BaseMinerNeuron
-from synth.protocol import Simulation, Challenge
+from synth.protocol import Simulation
 
 # Import from current directory
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +38,7 @@ class EWMAMiner(BaseMinerNeuron):
         
         bt.logging.info("EWMAMiner initialized with EWMA volatility models")
     
-    async def forward_miner(self, synapse: Simulation | Challenge) -> Simulation | Challenge:
+    async def forward_miner(self, synapse: Simulation) -> Simulation:
         """
         Handle incoming simulation request
         """
@@ -78,7 +78,7 @@ class EWMAMiner(BaseMinerNeuron):
         
         return synapse
     
-    async def blacklist(self, synapse: Simulation | Challenge) -> typing.Tuple[bool, str]:
+    async def blacklist(self, synapse: Simulation) -> typing.Tuple[bool, str]:
         """Blacklist logic (reuse base implementation)"""
         if synapse.dendrite is None or synapse.dendrite.hotkey is None:
             bt.logging.warning("Received request without dendrite or hotkey")
@@ -110,7 +110,7 @@ class EWMAMiner(BaseMinerNeuron):
         
         return False, "Hotkey recognized!"
     
-    async def priority(self, synapse: Simulation | Challenge) -> float:
+    async def priority(self, synapse: Simulation) -> float:
         """Priority based on stake"""
         if synapse.dendrite is None or synapse.dendrite.hotkey is None:
             return 0.0

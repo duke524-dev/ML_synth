@@ -54,10 +54,10 @@ BARS_5M = RETENTION_DAYS * (MINUTES_PER_DAY // 5)  # ~2,016 bars
 
 # EWMA half-lives (in seconds, converted to lambda per dt)
 HALF_LIFE_1M = {
-    "BTC": 900,  # 15 minutes, lambda=0.954842, avg_crps=712.907593
-    "ETH": 900,  # 15 minutes, lambda=0.954842, avg_crps=926.863937
-    "SOL": 1800,  # 30 minutes, lambda=0.977160, avg_crps=1225.116436
-    "XAU": 900,  # 15 minutes, lambda=0.954842, avg_crps=341.419342
+    "BTC": 1800,  # 30 minutes, lambda=0.977160, avg_crps=706.220022
+    "ETH": 1800,  # 30 minutes, lambda=0.977160, avg_crps=921.922903
+    "SOL": 1800,  # 30 minutes, lambda=0.977160, avg_crps=1218.048847
+    "XAU": 3600,  # 60 minutes, lambda=0.988514, avg_crps=338.006823
 }
 
 # HALF_LIFE_5M = {

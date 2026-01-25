@@ -4,11 +4,25 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 import time
+from typing import TYPE_CHECKING, Tuple, Optional
 import bittensor as bt
 
-import google.cloud.logging
-from google.cloud.logging_v2.handlers import setup_logging
-import google.auth.exceptions
+# Optional GCP logging imports
+try:
+    import google.cloud.logging
+    from google.cloud.logging_v2.handlers import setup_logging
+    import google.auth.exceptions
+    GCP_LOGGING_AVAILABLE = True
+    if TYPE_CHECKING:
+        from google.cloud.logging.handlers import CloudLoggingHandler
+        from google.cloud.logging import Client
+except ImportError:
+    GCP_LOGGING_AVAILABLE = False
+    google = None
+    setup_logging = None
+    if TYPE_CHECKING:
+        CloudLoggingHandler = None
+        Client = None
 
 EVENTS_LEVEL_NUM = 38
 DEFAULT_LOG_BACKUP_COUNT = 10
@@ -80,14 +94,17 @@ def setup_wandb_alert(wandb_run):
 
 def setup_gcp_logging(
     log_id_prefix: str | None, cycle_label: str | None = None
-) -> tuple[
-    google.cloud.logging.handlers.CloudLoggingHandler | None,
-    google.cloud.logging.Client | None,
-]:
+) -> Tuple[Optional["CloudLoggingHandler"], Optional["Client"]]:
     """
     Sets up GCP logging and returns the handler and client for manual flushing/closing.
     Call close_gcp_logging(handler, client) before shutdown to avoid losing logs.
     """
+    if not GCP_LOGGING_AVAILABLE:
+        bt.logging.warning(
+            "GCP logging is not available. Install google-cloud-logging to enable GCP logging."
+        )
+        return None, None
+    
     log_id = f"{log_id_prefix}-synth-validator"
     bt.logging.info(
         f"setting up GCP log forwarder with log_id: {log_id} and cycle_label: {cycle_label}"

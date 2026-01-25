@@ -25,7 +25,7 @@ import bittensor as bt
 # import base miner class which takes care of most of the boilerplate
 from synth.base.miner import BaseMinerNeuron
 from synth.miner.simulations import generate_simulations
-from synth.protocol import Simulation, Challenge
+from synth.protocol import Simulation
 
 
 class Miner(BaseMinerNeuron):
@@ -40,7 +40,7 @@ class Miner(BaseMinerNeuron):
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
 
-    async def forward_miner(self, synapse: Simulation | Challenge) -> Simulation | Challenge:
+    async def forward_miner(self, synapse: Simulation) -> Simulation:
         simulation_input = synapse.simulation_input
         bt.logging.info(
             f"Received prediction request from: {synapse.dendrite.hotkey} for timestamp: {simulation_input.start_time}"
@@ -56,7 +56,11 @@ class Miner(BaseMinerNeuron):
 
         return synapse
 
+<<<<<<< Updated upstream
     async def blacklist(self, synapse: Union[Simulation, Challenge]) -> typing.Tuple[bool, str]:
+=======
+    async def blacklist(self, synapse: Simulation) -> typing.Tuple[bool, str]:
+>>>>>>> Stashed changes
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
         define the logic for blacklisting requests based on your needs and desired security parameters.
@@ -126,7 +130,11 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
+<<<<<<< Updated upstream
     async def priority(self, synapse: Union[Simulation, Challenge]) -> float:
+=======
+    async def priority(self, synapse: Simulation) -> float:
+>>>>>>> Stashed changes
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.
