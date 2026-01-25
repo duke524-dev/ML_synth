@@ -73,25 +73,25 @@ HALF_LIFE_1M = {
 # }
 
 HALF_LIFE_5M = {
-    "AAPLX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1312.533006
-    "BTC": 3600,  # 1 hours, lambda=0.943874, avg_crps=2518.492630
-    "ETH": 3600,  # 1 hours, lambda=0.943874, avg_crps=3252.633827
-    "GOOGLX": 14400,  # 4 hours, lambda=0.985663, avg_crps=1986.880167
-    "NVDAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1678.214929
-    "SOL": 14400,  # 4 hours, lambda=0.985663, avg_crps=4367.582809
-    "SPYX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1190.991773
-    "TSLAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1657.966073
-    "XAU": 7200,  # 2 hours, lambda=0.971532, avg_crps=1260.446896
+    "AAPLX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1312.777361
+    "BTC": 3600,  # 1 hours, lambda=0.943874, avg_crps=2516.618658
+    "ETH": 3600,  # 1 hours, lambda=0.943874, avg_crps=3251.909859
+    "GOOGLX": 14400,  # 4 hours, lambda=0.985663, avg_crps=1986.561509
+    "NVDAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1677.818623
+    "SOL": 14400,  # 4 hours, lambda=0.985663, avg_crps=4366.873497
+    "SPYX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1191.611886
+    "TSLAX": 7200,  # 2 hours, lambda=0.971532, avg_crps=1657.246375
+    "XAU": 7200,  # 2 hours, lambda=0.971532, avg_crps=1259.751770
 }
 
 # Student-t degrees of freedom (nu)
 # Separate values for 1-minute (high frequency) and 5-minute (low frequency) prompts
 # Calibrated from calibration_results_nu_20260108_both_20260123_041210.txt
 NU_1M = {
-    "BTC": 9.5,  # avg_crps=717.552117 (HIGH_FREQUENCY optimized)
-    "ETH": 7.0,  # avg_crps=932.977186 (HIGH_FREQUENCY optimized)
-    "SOL": 8.0,  # avg_crps=1226.943205 (HIGH_FREQUENCY optimized)
-    "XAU": 9.5,  # avg_crps=339.815651 (HIGH_FREQUENCY optimized)
+    "BTC": 10.0,  # avg_crps=711.923151
+    "ETH": 9.0,  # avg_crps=926.695336
+    "SOL": 7.0,  # avg_crps=1224.570144
+    "XAU": 6.0,  # avg_crps=341.078486
     "SPYX": 10.0,  # Not calibrated, using default
     "NVDAX": 10.0,  # Not calibrated, using default
     "TSLAX": 10.0,  # Not calibrated, using default
@@ -100,10 +100,10 @@ NU_1M = {
 }
 
 NU_5M = {
-    "BTC": 6.5,  # avg_crps=2677.208480 (LOW_FREQUENCY optimized)
-    "ETH": 8.5,  # avg_crps=3410.764007 (LOW_FREQUENCY optimized)
-    "SOL": 4.0,  # avg_crps=4423.264927 (LOW_FREQUENCY optimized)
-    "XAU": 3.0,  # avg_crps=1348.498700 (LOW_FREQUENCY optimized)
+    "BTC": 9.0,  # avg_crps=2515.615899
+    "ETH": 10.0,  # avg_crps=3251.527849
+    "SOL": 5.0,  # avg_crps=4364.987904
+    "XAU": 5.5,  # avg_crps=1256.711113
     "SPYX": 10.0,  # Not calibrated, using default
     "NVDAX": 10.0,  # Not calibrated, using default
     "TSLAX": 10.0,  # Not calibrated, using default
