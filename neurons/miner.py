@@ -56,11 +56,7 @@ class Miner(BaseMinerNeuron):
 
         return synapse
 
-<<<<<<< Updated upstream
     async def blacklist(self, synapse: Union[Simulation, Challenge]) -> typing.Tuple[bool, str]:
-=======
-    async def blacklist(self, synapse: Simulation) -> typing.Tuple[bool, str]:
->>>>>>> Stashed changes
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
         define the logic for blacklisting requests based on your needs and desired security parameters.
@@ -130,11 +126,7 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
-<<<<<<< Updated upstream
     async def priority(self, synapse: Union[Simulation, Challenge]) -> float:
-=======
-    async def priority(self, synapse: Simulation) -> float:
->>>>>>> Stashed changes
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.
